@@ -1,0 +1,6 @@
+id=hyperfont_control
+name=HyperFont Control
+version=1.0.0
+versionCode=1000000
+author=Jian
+description=Portable font profiles with a local WebUI. Variable/static weights, HyperOS default-weight compatibility via Zygisk, and reboot-only ephemeral mounts.

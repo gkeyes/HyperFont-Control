@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "name": "可变字体配置示例，非手机当前配置",
+  "activation": "manual-reboot",
+  "slots": {
+    "chinese": {
+      "mode": "variable",
+      "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+      "faceIndex": 0,
+      "familyMode": "instances",
+      "weightMap": {
+        "100": 100,
+        "200": 200,
+        "300": 300,
+        "400": 400,
+        "500": 500,
+        "600": 600,
+        "700": 700,
+        "800": 800,
+        "900": 900
+      }
+    },
+    "latinSans": {
+      "mode": "variable",
+      "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+      "faceIndex": 0,
+      "familyMode": "continuous",
+      "axes": {
+        "opsz": 16
+      }
+    },
+    "serif": {
+      "mode": "system"
+    },
+    "monospace": {
+      "mode": "system"
+    }
+  }
+}

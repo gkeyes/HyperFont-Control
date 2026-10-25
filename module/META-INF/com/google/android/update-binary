@@ -1,0 +1,13 @@
+#!/sbin/sh
+umask 022
+OUTFD=$2
+ZIPFILE=$3
+export OUTFD ZIPFILE
+if [ ! -f /data/adb/magisk/util_functions.sh ]; then
+  echo "ui_print Install HyperFont from KernelSU, APatch or Magisk Manager."
+  echo "ui_print"
+  exit 1
+fi
+. /data/adb/magisk/util_functions.sh
+install_module
+exit 0

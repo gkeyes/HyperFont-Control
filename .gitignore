@@ -1,0 +1,14 @@
+dist/
+build-report.json
+__pycache__/
+*.pyc
+.DS_Store
+evidence/
+.codex-attachments/
+.playwright*/
+output/
+*.ttf
+*.otf
+*.ttc
+*.otc
+*.woff*

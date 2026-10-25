@@ -1,0 +1,12 @@
+[
+  {
+    "file": "zygisk.hpp",
+    "source": "https://raw.githubusercontent.com/topjohnwu/zygisk-module-sample/7bb941ac8edfcffd1d23761e401c45ca95409dc1/module/jni/zygisk.hpp",
+    "sha256": "fc6523882c0f8659b4fcd1e04ffb07d3a948090e5a8c08817af6e2b506a078d0"
+  },
+  {
+    "file": "jni.h",
+    "source": "https://android.googlesource.com/platform/libnativehelper/+/refs/tags/android-14.0.0_r1/include_jni/jni.h?format=TEXT",
+    "sha256": "c88ce2cb6ce10378cd4c706a3a2ad017794aedb9314ddcc341e39b470cdb601a"
+  }
+]

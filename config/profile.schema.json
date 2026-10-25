@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HyperFont Control 0.1 profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "name",
+    "slots",
+    "activation"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "activation": {
+      "const": "manual-reboot"
+    },
+    "slots": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chinese": {
+          "$ref": "#/$defs/slot"
+        },
+        "latinSans": {
+          "$ref": "#/$defs/slot"
+        },
+        "serif": {
+          "$ref": "#/$defs/slot"
+        },
+        "monospace": {
+          "$ref": "#/$defs/slot"
+        }
+      },
+      "required": [
+        "chinese",
+        "latinSans",
+        "serif",
+        "monospace"
+      ]
+    }
+  },
+  "$defs": {
+    "assetId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "axisValues": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9 ]{4}$"
+      },
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "weightMap": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "100",
+          "200",
+          "300",
+          "400",
+          "500",
+          "600",
+          "700",
+          "800",
+          "900"
+        ]
+      },
+      "required": [
+        "100",
+        "200",
+        "300",
+        "400",
+        "500",
+        "600",
+        "700",
+        "800",
+        "900"
+      ],
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "slot": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "const": "system"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "assetId",
+            "familyMode"
+          ],
+          "properties": {
+            "mode": {
+              "const": "variable"
+            },
+            "assetId": {
+              "$ref": "#/$defs/assetId"
+            },
+            "faceIndex": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "familyMode": {
+              "enum": [
+                "continuous",
+                "instances"
+              ]
+            },
+            "axes": {
+              "$ref": "#/$defs/axisValues"
+            },
+            "weightMap": {
+              "$ref": "#/$defs/weightMap"
+            },
+            "italicAssetId": {
+              "$ref": "#/$defs/assetId"
+            },
+            "italicFaceIndex": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "familyMode": {
+                    "const": "instances"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "weightMap"
+                ],
+                "properties": {
+                  "axes": {
+                    "not": {
+                      "required": [
+                        "wght"
+                      ]
+                    }
+                  }
+                }
+              },
+              "else": {
+                "not": {
+                  "required": [
+                    "weightMap"
+                  ]
+                },
+                "properties": {
+                  "axes": {
+                    "not": {
+                      "required": [
+                        "wght"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "faces",
+            "missingWeightPolicy"
+          ],
+          "properties": {
+            "mode": {
+              "const": "static"
+            },
+            "missingWeightPolicy": {
+              "enum": [
+                "reject",
+                "nearest"
+              ]
+            },
+            "faces": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 18,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "weight",
+                  "style",
+                  "assetId",
+                  "faceIndex"
+                ],
+                "properties": {
+                  "weight": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 900,
+                    "multipleOf": 100
+                  },
+                  "style": {
+                    "enum": [
+                      "normal",
+                      "italic"
+                    ]
+                  },
+                  "assetId": {
+                    "$ref": "#/$defs/assetId"
+                  },
+                  "faceIndex": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

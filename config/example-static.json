@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "name": "静态九字重配置示例，非手机当前配置",
+  "activation": "manual-reboot",
+  "slots": {
+    "chinese": {
+      "mode": "static",
+      "missingWeightPolicy": "reject",
+      "faces": [
+        {
+          "weight": 100,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 1
+        },
+        {
+          "weight": 200,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 2
+        },
+        {
+          "weight": 300,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 3
+        },
+        {
+          "weight": 400,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 0
+        },
+        {
+          "weight": 500,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 4
+        },
+        {
+          "weight": 600,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 5
+        },
+        {
+          "weight": 700,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 6
+        },
+        {
+          "weight": 800,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 7
+        },
+        {
+          "weight": 900,
+          "style": "normal",
+          "assetId": "0000000000000000000000000000000000000000000000000000000000000000",
+          "faceIndex": 8
+        }
+      ]
+    },
+    "latinSans": {
+      "mode": "system"
+    },
+    "serif": {
+      "mode": "system"
+    },
+    "monospace": {
+      "mode": "system"
+    }
+  }
+}

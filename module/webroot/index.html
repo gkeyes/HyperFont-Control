@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>HyperFont · 字体控制</title><link rel="stylesheet" href="style.css">
+</head>
+<body data-tab="settings">
+  <main>
+    <header class="topbar"><div><h1>字体控制</h1><p>选择喜欢的字，保留自己的习惯。</p></div><button id="refresh" class="icon-button" aria-label="刷新状态"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.1 8a7.5 7.5 0 0 1 12.4-3L20 8M4 16l2.5 3A7.5 7.5 0 0 0 19 16"/></svg></button></header>
+    <div id="offline" class="notice" hidden>请从模块管理器打开此面板，连接手机上的字体模块。</div>
+    <div id="preview-banner" class="notice" hidden>电脑预览 · 操作仅作用于本地测试目录，不连接手机。</div>
+    <section class="status-panel" aria-label="当前状态"><div><span class="status-dot" id="status-dot"></span><strong id="status-title">正在读取配置</strong></div><p id="status-description">连接字体模块…</p><p id="pending-description" hidden></p></section>
+    <nav aria-label="面板导航"><button data-tab="settings" aria-current="page">字体设置</button><button data-tab="library">字体库 <span id="font-count">0</span></button><button data-tab="diagnostics">诊断与恢复</button></nav>
+    <section id="settings" class="tab-panel">
+      <div id="settings-overview">
+      <div class="section-heading"><div><h2>我的字体组合</h2><p>中文与英文分开选择，缺字沿用系统补字。</p></div></div>
+      <label class="name-label">配置名称<input id="profile-name" maxlength="80" autocomplete="off" value="我的字体组合"></label>
+      <div class="profile-tools"><label class="file-button">导入配置<input id="profile-file" type="file" accept=".json,application/json"></label><button id="export-profile" class="secondary">导出配置</button></div>
+      </div>
+      <div id="font-page" hidden>
+        <button id="back-overview" class="back-button">返回字体组合</button>
+        <div class="editor-heading"><h2 id="font-page-title"></h2><span id="font-page-position"></span></div>
+        <div class="page-controls" aria-label="字体设置步骤"><button id="step-previous" class="secondary">上一页</button><span id="step-label"></span><button id="step-next" class="secondary">下一页</button></div>
+      </div>
+      <div id="slots"></div>
+      <div id="settings-footnote" class="footnote">表情与其他语言保留系统设置。点进每个分类，分别选择字体与字重。</div>
+      <section id="validation" class="validation" aria-live="polite" hidden></section>
+      <div class="save-bar">
+      <div class="actions"><button id="validate" class="secondary">检查配置</button><button id="save" class="secondary">保存草稿</button><button id="stage" class="primary">提交更改</button></div>
+      <p class="action-hint">提交后，由你手动重启生效。</p>
+      </div>
+    </section>
+    <section id="library" class="tab-panel" hidden>
+      <div class="section-heading"><div><h2>字体库</h2><p>支持 TTF、OTF 和字体集合；可变与静态字体自动识别。</p></div><label class="file-button">选择文件<input id="font-file" type="file" accept=".ttf,.otf,.ttc,.otc" multiple></label></div>
+      <details class="path-import"><summary>从手机 Download 文件夹直接导入（适合大文件）</summary><label>字体完整路径<input id="import-path" placeholder="/sdcard/Download/字体.ttf" autocomplete="off"></label><button id="import-path-button" class="secondary">导入此文件</button><p>直接读取手机文件，避免大字体通过 WebView 分块传输。</p></details>
+      <button id="cleanup-uploads" class="secondary">清理未完成导入</button>
+      <div id="import-progress" role="status" hidden><progress id="import-meter" max="100" value="0"></progress><span id="import-message"></span></div>
+      <div id="font-list" class="font-list"></div>
+      <div id="library-pages" class="page-controls"><button id="library-prev" class="secondary">上一页</button><span id="library-page-label"></span><button id="library-next" class="secondary">下一页</button></div>
+    </section>
+    <section id="diagnostics" class="tab-panel" hidden>
+      <div class="section-heading"><div><h2>覆盖范围</h2><p>系统配置已覆盖，不等于每个应用都完成了显示验证。</p></div></div>
+      <div class="subnav"><button id="show-coverage" aria-current="page">覆盖范围</button><button id="show-runtime">运行信息与恢复</button></div>
+      <div id="coverage-page"><div class="coverage-list">
+        <div><strong>Android 系统字体</strong><span>字体表与缺字回退</span></div>
+        <div><strong>HyperOS 字体入口</strong><span>MiSans 独立配置与传统配置</span></div>
+        <div><strong>应用自带字体 / 网页字体</strong><span>保留原样，尚未提供应用适配插件</span></div>
+        <div><strong>通知角色与小米动态替换</strong><span>仍需真机验收，不全局加粗 Light</span></div>
+      </div>
+      </div>
+      <div id="runtime-page" hidden>
+      <dl id="diagnostic-details"></dl>
+      <div class="actions"><button id="export" class="secondary">导出诊断</button><button id="refresh-baseline" class="secondary">重新识别系统</button><button id="cancel-pending" class="secondary">取消待生效配置</button><button id="restore" class="danger">恢复系统字体</button></div>
+      <p class="action-hint">恢复同样在手动重启后生效。卸载会移除本模块的字体库与设置。</p>
+      </div>
+    </section>
+    <footer>HyperFont <span id="version">1.0.0</span> <span>·</span> 本地运行，无需联网</footer>
+  </main>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="confirm-dialog"><h2 id="dialog-title"></h2><p id="dialog-text"></p><div class="actions"><button id="dialog-cancel" class="secondary">取消</button><button id="dialog-ok" class="primary">确认</button></div></dialog>
+  <script type="module" src="app.js"></script>
+</body></html>
