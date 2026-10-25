@@ -7,58 +7,81 @@
   <title>HyperFont · 字体控制</title><link rel="stylesheet" href="style.css">
 </head>
 <body data-tab="settings">
+  <div class="backdrop" aria-hidden="true"><span></span><span></span><span></span></div>
   <main>
-    <header class="topbar"><div><h1>字体控制</h1><p>选择喜欢的字，保留自己的习惯。</p></div><button id="refresh" class="icon-button" aria-label="刷新状态"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.1 8a7.5 7.5 0 0 1 12.4-3L20 8M4 16l2.5 3A7.5 7.5 0 0 0 19 16"/></svg></button></header>
+    <header class="topbar">
+      <div><h1 id="page-title">字体</h1><p id="page-subtitle">选择喜欢的字，保留自己的习惯。</p></div>
+      <button id="refresh" class="icon-button glass-button" aria-label="刷新状态"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.1 8a7.5 7.5 0 0 1 12.4-3L20 8M4 16l2.5 3A7.5 7.5 0 0 0 19 16"/></svg></button>
+      <label class="file-button primary import-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>导入字体<input id="font-file" type="file" accept=".ttf,.otf,.ttc,.otc" multiple></label>
+    </header>
     <div id="offline" class="notice" hidden>请从模块管理器打开此面板，连接手机上的字体模块。</div>
     <div id="preview-banner" class="notice" hidden>电脑预览 · 操作仅作用于本地测试目录，不连接手机。</div>
-    <section class="status-panel" aria-label="当前状态"><div><span class="status-dot" id="status-dot"></span><strong id="status-title">正在读取配置</strong></div><p id="status-description">连接字体模块…</p><p id="pending-description" hidden></p></section>
-    <nav aria-label="面板导航"><button data-tab="settings" aria-current="page">字体设置</button><button data-tab="library">字体库 <span id="font-count">0</span></button><button data-tab="diagnostics">诊断与恢复</button></nav>
+
     <section id="settings" class="tab-panel">
       <div id="settings-overview">
-      <div class="section-heading"><div><h2>我的字体组合</h2><p>中文与英文分开选择，缺字沿用系统补字。</p></div></div>
-      <label class="name-label">配置名称<input id="profile-name" maxlength="80" autocomplete="off" value="我的字体组合"></label>
-      <div class="profile-tools"><label class="file-button">导入配置<input id="profile-file" type="file" accept=".json,application/json"></label><button id="export-profile" class="secondary">导出配置</button></div>
+        <section class="status-panel glass" aria-label="当前状态">
+          <div class="status-title"><span class="status-dot" id="status-dot"></span><strong id="status-title">正在读取配置</strong></div>
+          <p id="status-description">连接字体模块…</p>
+          <div class="specimen" aria-label="当前系统字体示例">永和九年 Aa Ag 01</div>
+          <p id="pending-description" class="pending-strip" hidden></p>
+        </section>
+        <div class="profile-row">
+          <label class="name-label">配置名称<input id="profile-name" class="glass-field" maxlength="80" autocomplete="off" value="我的字体组合"></label>
+          <label class="file-button glass-button">导入<input id="profile-file" type="file" accept=".json,application/json"></label>
+          <button id="export-profile" class="glass-button">导出</button>
+        </div>
       </div>
       <div id="font-page" hidden>
-        <button id="back-overview" class="back-button">返回字体组合</button>
-        <div class="editor-heading"><h2 id="font-page-title"></h2><span id="font-page-position"></span></div>
-        <div class="page-controls" aria-label="字体设置步骤"><button id="step-previous" class="secondary">上一页</button><span id="step-label"></span><button id="step-next" class="secondary">下一页</button></div>
+        <div class="editor-heading">
+          <button id="back-overview" class="icon-button glass-button" aria-label="返回字体组合"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg></button>
+          <div class="editor-title"><h2 id="font-page-title"></h2><span id="font-page-position"></span></div>
+          <div class="slot-pager glass-button"><button id="slot-previous" aria-label="上一个分类"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><button id="slot-next" aria-label="下一个分类"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
+        </div>
+        <div class="segmented glass" aria-label="字体设置步骤"><button id="step-font" aria-pressed="true">① 选择字体</button><button id="step-weight" aria-pressed="false">② 字重设置</button></div>
       </div>
+      <section id="validation" class="validation glass" aria-live="polite" hidden></section>
       <div id="slots"></div>
-      <div id="settings-footnote" class="footnote">表情与其他语言保留系统设置。点进每个分类，分别选择字体与字重。</div>
-      <section id="validation" class="validation" aria-live="polite" hidden></section>
-      <div class="save-bar">
-      <div class="actions"><button id="validate" class="secondary">检查配置</button><button id="save" class="secondary">保存草稿</button><button id="stage" class="primary">提交更改</button></div>
-      <p class="action-hint">提交后，由你手动重启生效。</p>
-      </div>
+      <p id="settings-footnote" class="footnote">表情与其他语言保留系统设置。点进每个分类，分别选择字体与字重；提交后，由你手动重启生效。</p>
     </section>
+
     <section id="library" class="tab-panel" hidden>
-      <div class="section-heading"><div><h2>字体库</h2><p>支持 TTF、OTF 和字体集合；可变与静态字体自动识别。</p></div><label class="file-button">选择文件<input id="font-file" type="file" accept=".ttf,.otf,.ttc,.otc" multiple></label></div>
-      <details class="path-import"><summary>从手机 Download 文件夹直接导入（适合大文件）</summary><label>字体完整路径<input id="import-path" placeholder="/sdcard/Download/字体.ttf" autocomplete="off"></label><button id="import-path-button" class="secondary">导入此文件</button><p>直接读取手机文件，避免大字体通过 WebView 分块传输。</p></details>
-      <button id="cleanup-uploads" class="secondary">清理未完成导入</button>
-      <div id="import-progress" role="status" hidden><progress id="import-meter" max="100" value="0"></progress><span id="import-message"></span></div>
-      <div id="font-list" class="font-list"></div>
-      <div id="library-pages" class="page-controls"><button id="library-prev" class="secondary">上一页</button><span id="library-page-label"></span><button id="library-next" class="secondary">下一页</button></div>
+      <details class="path-import glass">
+        <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg><span><strong>从 Download 文件夹导入</strong><small>适合大文件，不经过 WebView 分块传输</small></span></summary>
+        <label>字体完整路径<input id="import-path" class="glass-field" placeholder="/sdcard/Download/字体.ttf" autocomplete="off"></label>
+        <button id="import-path-button" class="glass-button">导入此文件</button>
+      </details>
+      <div id="import-progress" class="glass" role="status" hidden><span id="import-message"></span><progress id="import-meter" max="100" value="0"></progress></div>
+      <div id="font-list" class="font-list glass"></div>
+      <div id="library-pages" class="page-controls"><button id="library-prev" class="glass-button">上一页</button><span id="library-page-label"></span><button id="library-next" class="glass-button">下一页</button></div>
+      <button id="cleanup-uploads" class="glass-button quiet">清理未完成导入</button>
     </section>
+
     <section id="diagnostics" class="tab-panel" hidden>
-      <div class="section-heading"><div><h2>覆盖范围</h2><p>系统配置已覆盖，不等于每个应用都完成了显示验证。</p></div></div>
-      <div class="subnav"><button id="show-coverage" aria-current="page">覆盖范围</button><button id="show-runtime">运行信息与恢复</button></div>
-      <div id="coverage-page"><div class="coverage-list">
+      <div class="segmented glass"><button id="show-coverage" aria-pressed="true">覆盖范围</button><button id="show-runtime" aria-pressed="false">运行信息与恢复</button></div>
+      <div id="coverage-page"><div class="grouped glass coverage-list">
         <div><strong>Android 系统字体</strong><span>字体表与缺字回退</span></div>
         <div><strong>HyperOS 字体入口</strong><span>MiSans 独立配置与传统配置</span></div>
         <div><strong>应用自带字体 / 网页字体</strong><span>保留原样，尚未提供应用适配插件</span></div>
         <div><strong>通知角色与小米动态替换</strong><span>仍需真机验收，不全局加粗 Light</span></div>
-      </div>
-      </div>
+      </div></div>
       <div id="runtime-page" hidden>
-      <dl id="diagnostic-details"></dl>
-      <div class="actions"><button id="export" class="secondary">导出诊断</button><button id="refresh-baseline" class="secondary">重新识别系统</button><button id="cancel-pending" class="secondary">取消待生效配置</button><button id="restore" class="danger">恢复系统字体</button></div>
-      <p class="action-hint">恢复同样在手动重启后生效。卸载会移除本模块的字体库与设置。</p>
+        <dl id="diagnostic-details" class="grouped glass"></dl>
+        <div class="grouped glass action-list"><button id="export">导出诊断</button><button id="refresh-baseline">重新识别系统</button><button id="cancel-pending">取消待生效配置</button></div>
+        <button id="restore" class="danger">恢复系统字体</button>
+        <p class="action-hint">恢复同样在手动重启后生效。卸载会移除本模块的字体库与设置。</p>
       </div>
     </section>
-    <footer>HyperFont <span id="version">1.0.0</span> <span>·</span> 本地运行，无需联网</footer>
+    <footer>HyperFont <span id="version">2.0.0</span> <span>·</span> 本地运行，无需联网</footer>
   </main>
+  <div class="save-bar glass">
+    <button id="validate" class="glass-button">检查</button><button id="save" class="glass-button">存草稿</button><button id="stage" class="primary">提交更改</button>
+  </div>
+  <nav class="tab-bar glass" aria-label="面板导航">
+    <button data-tab="settings" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19 9 5h1l5 14M6 14h7M16 19v-5.5a2.5 2.5 0 0 1 5 0V19M16 16.5h5"/></svg><span>字体设置</span></button>
+    <button data-tab="library"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4v16H5zM10 4h4v16h-4zM15.5 5.2l3.8-1 3.7 14.5-3.8 1z"/></svg><span>字体库 · <b id="font-count">0</b></span></button>
+    <button data-tab="diagnostics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>诊断与恢复</span></button>
+  </nav>
   <div id="toast" role="status" aria-live="polite" hidden></div>
-  <dialog id="confirm-dialog"><h2 id="dialog-title"></h2><p id="dialog-text"></p><div class="actions"><button id="dialog-cancel" class="secondary">取消</button><button id="dialog-ok" class="primary">确认</button></div></dialog>
+  <dialog id="confirm-dialog" class="glass"><h2 id="dialog-title"></h2><p id="dialog-text"></p><div class="dialog-actions"><button id="dialog-cancel" class="glass-button">取消</button><button id="dialog-ok" class="primary">确认</button></div></dialog>
   <script type="module" src="app.js"></script>
 </body></html>
