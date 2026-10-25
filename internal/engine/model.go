@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-const Version = "2.0.0"
+const Version = "2.0.1"
 const MaxFontSize = 256 << 20
 
 var assetPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
