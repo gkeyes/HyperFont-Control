@@ -46,22 +46,25 @@ async function request(payload) {
   if (!reply.ok) throw new Error(reply.error || '操作失败');
   return reply.data;
 }
+function markDirty() { dirty = true; $('#validation').hidden = true; }
 function toast(message) { clearTimeout(toastTimer); $('#toast').textContent = message; $('#toast').hidden = false; toastTimer = setTimeout(() => $('#toast').hidden = true, 5000); }
 function humanMessage(message) { return message.replace(/chinese:/g, '中文：').replace(/latinSans:/g, '无衬线英文：').replace(/serif:/g, '衬线英文：').replace(/monospace:/g, '等宽英文：').replace(/OEM/g, '厂商').replace(/全局 Hook/g, '全局应用适配'); }
-function validation(message, warnings = [], error = false) { const box = $('#validation'); box.replaceChildren(); box.classList.toggle('error', error); if (warnings?.length) { const details = document.createElement('details'); details.append(text('summary', humanMessage(message) + ' · 查看说明')); const list = document.createElement('ul'); warnings.forEach(w => list.append(text('li', humanMessage(w)))); details.append(list); box.append(details); } else box.append(text('p', humanMessage(message))); box.hidden = false; box.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+function resultBox(box, message, items = [], error = false) { box.replaceChildren(); box.classList.toggle('error', error); if (items?.length) { const details = document.createElement('details'); details.append(text('summary', humanMessage(message) + ' · 查看说明')); const list = document.createElement('ul'); items.forEach(w => list.append(text('li', humanMessage(w)))); details.append(list); box.append(details); } else box.append(text('p', humanMessage(message))); box.hidden = false; box.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+function validation(message, warnings = [], error = false) { resultBox($('#validation'), message, warnings, error); }
+function renderImportErrors(message, items) { resultBox($('#import-errors'), message, items, true); $('#import-errors details').open = true; }
 async function run(fn) { if (busy) return; busy = true; document.querySelectorAll('button, input, select').forEach(e => e.disabled = true); try { await fn(); } catch (e) { toast(e.message); validation(e.message, [], true); } finally { busy = false; document.querySelectorAll('button, input, select').forEach(e => e.disabled = !(native || isPreview)); } }
 function confirmAction(title, message) { return new Promise(resolve => { const dialog = $('#confirm-dialog'); $('#dialog-title').textContent = title; $('#dialog-text').textContent = message; const finish = result => { dialog.close(); resolve(result); }; $('#dialog-ok').disabled = false; $('#dialog-cancel').disabled = false; $('#dialog-ok').onclick = () => finish(true); $('#dialog-cancel').onclick = () => finish(false); dialog.oncancel = e => { e.preventDefault(); finish(false); }; dialog.showModal(); }); }
 function faceList(key, mode, italic = false) { return fonts.flatMap(a => a.faces.filter(f => (key === 'chinese' ? f.chinese : f.latin) && f.italic === italic && (mode === 'variable' ? f.axes.length > 0 && f.axes.some(x => x.tag === 'wght') : f.axes.length === 0)).map(f => ({ asset: a, face: f, value: `${a.id}:${f.index}` }))); }
 function faceMeta(id, index = 0) { return fonts.find(f => f.id === id)?.faces.find(f => f.index === index); }
 function option(value, label) { const e = text('option', label); e.value = value; return e; }
-function selectField(label, options, value, change) { const wrap = text('label', '', 'field'); wrap.append(text('span', label)); const select = document.createElement('select'); select.setAttribute('aria-label', label); options.forEach(([v, l]) => select.append(option(v, l))); select.value = value; select.addEventListener('change', () => { change(select.value); dirty = true; }); wrap.append(select); return wrap; }
+function selectField(label, options, value, change) { const wrap = text('label', '', 'field'); wrap.append(text('span', label)); const select = document.createElement('select'); select.setAttribute('aria-label', label); options.forEach(([v, l]) => select.append(option(v, l))); select.value = value; select.addEventListener('change', () => { change(select.value); markDirty(); }); wrap.append(select); return wrap; }
 function defaultMap(slot) { const a = faceMeta(slot.assetId, slot.faceIndex)?.axes.find(a => a.tag === 'wght'); return Object.fromEntries(weights.map(w => [w, a ? Math.max(a.min, Math.min(a.max, w)) : w])); }
 function setRef(slot, value, italic = false) { const [id, index] = value.split(':'); if (italic) { if (id) { slot.italicAssetId = id; slot.italicFaceIndex = Number(index); } else { delete slot.italicAssetId; delete slot.italicFaceIndex; } } else { slot.assetId = id; slot.faceIndex = Number(index || 0); slot.axes = {}; delete slot.savedWeightMap; if (slot.familyMode === 'instances') slot.weightMap = defaultMap(slot); } }
 function slotSummary(s) { if (s.mode === 'system') return '沿用系统字体'; if (s.mode === 'variable') return faceMeta(s.assetId, s.faceIndex)?.name || '选择一个可变字体'; return s.faces.length ? `静态多字重 · ${s.faces.length} 个字重面` : '选择静态字重文件'; }
 function icon(d) { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', d); svg.append(path); return svg; }
-function segmentedField(label, options, value, change) { const wrap = text('div', '', 'field'); wrap.append(text('span', label)); const group = text('div', '', 'segmented'); group.setAttribute('role', 'group'); group.setAttribute('aria-label', label); for (const [v, l] of options) { const b = text('button', l); b.type = 'button'; b.setAttribute('aria-pressed', String(v === value)); b.onclick = () => { if (v === value) return; dirty = true; change(v); }; group.append(b); } wrap.append(group); return wrap; }
+function segmentedField(label, options, value, change) { const wrap = text('div', '', 'field'); wrap.append(text('span', label)); const group = text('div', '', 'segmented'); group.setAttribute('role', 'group'); group.setAttribute('aria-label', label); for (const [v, l] of options) { const b = text('button', l); b.type = 'button'; b.setAttribute('aria-pressed', String(v === value)); b.onclick = () => { if (v === value) return; markDirty(); change(v); }; group.append(b); } wrap.append(group); return wrap; }
 function pressed(id, on) { $(id).setAttribute('aria-pressed', String(on)); }
-function showTab(tab) { document.body.dataset.tab = tab; document.querySelectorAll('.tab-bar button').forEach(b => b.dataset.tab === tab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')); document.querySelectorAll('.tab-panel').forEach(p => p.hidden = p.id !== tab); renderTitle(); }
+function showTab(tab) { if (tab !== document.body.dataset.tab) { $('#validation').hidden = true; $('#import-errors').hidden = true; } document.body.dataset.tab = tab; document.querySelectorAll('.tab-bar button').forEach(b => b.dataset.tab === tab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')); document.querySelectorAll('.tab-panel').forEach(p => p.hidden = p.id !== tab); renderTitle(); }
 function renderTitle() { const [title, subtitle] = pages[document.body.dataset.tab]; $('#page-title').textContent = title; $('#page-subtitle').textContent = subtitle(); }
 function weightBar(value, axis) { const lo = axis ? axis.min : 0, hi = axis ? axis.max : 1000; return `${Math.max(0, Math.min(100, (value - lo) / (hi - lo || 1) * 100))}%`; }
 function renderSlots(openKey) {
@@ -120,7 +123,7 @@ function renderSlots(openKey) {
           const row = text('label', '', `weight-row${w === 400 ? ' regular' : ''}`); const bar = text('span', '', 'weight-bar'); const fill = document.createElement('i'); bar.append(fill);
           const input = document.createElement('input'); input.type = 'number'; input.step = 'any'; input.inputMode = 'decimal'; input.value = s.weightMap[w]; input.setAttribute('aria-label', `${title}请求 ${w} 的实际轴值`); if (wght) { input.min = wght.min; input.max = wght.max; }
           fill.style.width = weightBar(s.weightMap[w], wght);
-          input.oninput = () => { s.weightMap[w] = input.value === '' ? NaN : Number(input.value); fill.style.width = weightBar(s.weightMap[w] || 0, wght); dirty = true; };
+          input.oninput = () => { s.weightMap[w] = input.value === '' ? NaN : Number(input.value); fill.style.width = weightBar(s.weightMap[w] || 0, wght); markDirty(); };
           row.append(text('span', w === 400 ? '400 常规' : String(w)), bar, input); rows.append(row);
         }
         editor.append(rows);
@@ -128,13 +131,13 @@ function renderSlots(openKey) {
       const axes = meta?.axes.filter(a => a.tag !== 'wght') || [];
       if (axes.length) {
         const advanced = document.createElement('details'); advanced.className = 'advanced-axes'; advanced.append(text('summary', '其他可变轴'));
-        for (const axis of axes) { const label = text('label', '', 'field'); label.append(text('span', `${axis.tag} · ${axis.min}–${axis.max}`)); const input = document.createElement('input'); input.type = 'number'; input.step = 'any'; input.min = axis.min; input.max = axis.max; input.value = s.axes?.[axis.tag] ?? axis.default; input.oninput = () => { s.axes ||= {}; s.axes[axis.tag] = input.value === '' ? NaN : Number(input.value); dirty = true; }; label.append(input); advanced.append(label); } editor.append(advanced);
+        for (const axis of axes) { const label = text('label', '', 'field'); label.append(text('span', `${axis.tag} · ${axis.min}–${axis.max}`)); const input = document.createElement('input'); input.type = 'number'; input.step = 'any'; input.min = axis.min; input.max = axis.max; input.value = s.axes?.[axis.tag] ?? axis.default; input.oninput = () => { s.axes ||= {}; s.axes[axis.tag] = input.value === '' ? NaN : Number(input.value); markDirty(); }; label.append(input); advanced.append(label); } editor.append(advanced);
       }
     }
     if (s.mode === 'static') {
       editor.append(selectField('缺少字重时', [['nearest', '使用最近的已有字重'], ['reject', '必须提供完整九档正体']], s.missingWeightPolicy, value => s.missingWeightPolicy = value));
       const table = document.createElement('table'); table.className = 'weight-table'; const head = document.createElement('thead'); const tr = document.createElement('tr'); ['请求', '正体文件', '斜体文件'].forEach(t => tr.append(text('th', t))); head.append(tr); table.append(head); const body = document.createElement('tbody');
-      for (const weight of weights) { const row = document.createElement('tr'); row.append(text('td', weight)); for (const style of ['normal', 'italic']) { const cell = document.createElement('td'); const sel = document.createElement('select'); sel.setAttribute('aria-label', `${title} ${weight} ${style === 'normal' ? '正体' : '斜体'}`); sel.append(option('', '未指定')); faceList(key, 'static', style === 'italic').forEach(o => sel.append(option(o.value, `${o.face.weight} · ${o.face.name}`))); const ref = s.faces.find(r => r.weight === weight && r.style === style); sel.value = ref ? `${ref.assetId}:${ref.faceIndex}` : ''; sel.onchange = () => { s.faces = s.faces.filter(r => r.weight !== weight || r.style !== style); if (sel.value) { const [assetId, index] = sel.value.split(':'); s.faces.push({ assetId, faceIndex: Number(index), weight, style }); } dirty = true; }; cell.append(sel); row.append(cell); } body.append(row); } table.append(body); editor.append(table);
+      for (const weight of weights) { const row = document.createElement('tr'); row.append(text('td', weight)); for (const style of ['normal', 'italic']) { const cell = document.createElement('td'); const sel = document.createElement('select'); sel.setAttribute('aria-label', `${title} ${weight} ${style === 'normal' ? '正体' : '斜体'}`); sel.append(option('', '未指定')); faceList(key, 'static', style === 'italic').forEach(o => sel.append(option(o.value, `${o.face.weight} · ${o.face.name}`))); const ref = s.faces.find(r => r.weight === weight && r.style === style); sel.value = ref ? `${ref.assetId}:${ref.faceIndex}` : ''; sel.onchange = () => { s.faces = s.faces.filter(r => r.weight !== weight || r.style !== style); if (sel.value) { const [assetId, index] = sel.value.split(':'); s.faces.push({ assetId, faceIndex: Number(index), weight, style }); } markDirty(); }; cell.append(sel); row.append(cell); } body.append(row); } table.append(body); editor.append(table);
     }
   }
   root.append(editor);
@@ -169,7 +172,7 @@ function renderLibrary() {
 }
 function renderStatus() {
   const active = status.active; const boot = status.boot; const pending = status.pending;
-  $('#version').textContent = status.version; $('#status-dot').className = 'status-dot';
+  $('#version').textContent = status.version; $('#status-dot').className = 'status-dot'; $('.status-title').classList.toggle('failed', ['failed', 'guarded'].includes(boot.state));
   if (boot.state === 'guarded') { $('#status-title').textContent = '已暂停这份字体配置'; $('#status-description').textContent = boot.error; $('#status-dot').classList.add('failed'); }
   else if (boot.state === 'failed') { $('#status-title').textContent = '本次挂载未完成'; $('#status-description').textContent = boot.error || '请查看诊断信息'; $('#status-dot').classList.add('failed'); }
   else if (status.visible) { $('#status-title').textContent = '字体覆盖已挂载'; $('#status-description').textContent = `${active?.profile.name || ''} · 已核对字体表和文件内容，界面效果仍需检查。`; }
@@ -177,7 +180,7 @@ function renderStatus() {
   else { $('#status-title').textContent = boot.state === 'system' ? '当前沿用系统字体' : '尚未应用字体配置'; $('#status-description').textContent = '选择字体并保存后，手动重启即可尝试新配置。'; }
   $('#pending-description').hidden = !pending;
   if (pending) { const blocked = boot.state === 'guarded' && pending.id === boot.generation; $('#pending-description').textContent = `${blocked ? '已暂停，需重新提交' : '待重启使用'}：${pending.profile.name}`; if (!['failed', 'guarded'].includes(boot.state)) $('#status-dot').classList.add('pending'); }
-  const dl = $('#diagnostic-details'); dl.replaceChildren(); for (const [label, value] of [['核心版本', status.version], ['Android SDK', status.baseline?.sdk || '尚未识别'], ['挂载方式', '开机临时覆盖'], ['最近开机结果', bootLabels[boot.state] || boot.state || '尚未运行'], ['验证层级', status.visible ? '字体表与文件内容校验' : '尚无当前挂载证据'], ['应用界面实测', '待用户重启后验收']]) dl.append(text('dt', label), text('dd', value));
+  const dl = $('#diagnostic-details'); dl.replaceChildren(); for (const [label, value] of [['核心版本', status.version], ['Android SDK', status.baseline?.sdk || '尚未识别'], ['挂载方式', '开机临时覆盖'], ['最近开机结果', (boot.state ? bootLabels[boot.state] || `未知状态（${boot.state}）` : '尚未运行')], ['验证层级', status.visible ? '字体表与文件内容校验' : '尚无当前挂载证据'], ['应用界面实测', '待用户重启后验收']]) dl.append(text('dt', label), text('dd', value));
   const compat = status.fontCompatibility;
   if (compat?.needed) dl.append(text('dt', '小米默认字重'), text('dd', compat.preparedThisBoot ? '兼容层已准备；需启用 Zygisk，应用效果待验收' : '请启用 Zygisk，并手动重启以加载兼容层'));
 }
@@ -186,7 +189,7 @@ function currentProfile() { profile.name = $('#profile-name').value.trim(); cons
 function moveSlot(step) { const index = slots.findIndex(([key]) => key === selectedSlot) + step; if (index < 0 || index >= slots.length) return; renderSlots(slots[index][0]); window.scrollTo(0, 0); }
 function setStep(step) { editorStep = step; renderSlots(); window.scrollTo(0, 0); }
 document.querySelectorAll('.tab-bar button').forEach(button => button.onclick = () => showTab(button.dataset.tab));
-$('#profile-name').oninput = () => dirty = true;
+$('#profile-name').oninput = () => markDirty();
 $('#back-overview').onclick = () => { renderSlots(null); window.scrollTo(0, 0); };
 $('#slot-previous').onclick = () => moveSlot(-1);
 $('#slot-next').onclick = () => moveSlot(1);
@@ -199,7 +202,7 @@ $('#refresh').onclick = () => run(async () => { if (!dirty || await confirmActio
 $('#validate').onclick = () => run(async () => { const r = await request({ op: 'validate', profile: currentProfile() }); validation('配置检查通过', r.warnings); });
 $('#save').onclick = () => run(async () => { const r = await request({ op: 'save', profile: currentProfile() }); dirty = false; validation('草稿已保存，尚未提交生效', r.warnings); toast('草稿已保存'); });
 $('#stage').onclick = () => run(async () => { const r = await request({ op: 'stage', profile: currentProfile() }); dirty = false; selectedSlot = null; await loadStatus(); validation('已保存待生效配置。请手动重启后检查通知、设置和常用应用。', r.warnings); toast('已保存，等待你手动重启'); });
-$('#restore').onclick = async () => { if (await confirmAction('恢复系统字体', '将保存一份系统字体配置，手动重启后撤销本模块的覆盖。字体库仍保留。')) run(async () => { await request({ op: 'restore' }); await loadStatus(); toast('已准备恢复，手动重启后生效'); }); };
+$('#restore').onclick = async () => { if (await confirmAction('恢复系统字体', '将保存一份系统字体配置，手动重启后撤销本模块的覆盖。字体库和你的草稿仍保留。')) run(async () => { await request({ op: 'restore' }); await loadStatus(true); toast('已准备恢复，手动重启后生效'); }); };
 $('#cancel-pending').onclick = () => run(async () => { await request({ op: 'cancel_pending' }); await loadStatus(true); toast('已取消待生效配置'); });
 function downloadJSON(name, data) { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000); }
 $('#export').onclick = () => run(async () => { if (native) { const r = await request({ op: 'export_diagnostics' }); toast(`已保存到 ${r.path}`); } else downloadJSON('HyperFont-diagnostics.json', await request({ op: 'diagnostics' })); });
@@ -209,20 +212,27 @@ $('#refresh-baseline').onclick = async () => { if (await confirmAction('重新�
 $('#import-path-button').onclick = () => run(async () => { await request({ op: 'import_path', path: $('#import-path').value.trim() }); await loadStatus(true); toast('字体已导入'); });
 $('#cleanup-uploads').onclick = async () => { if (busy) return; if (await confirmAction('清理未完成导入', '清理未完成上传的临时文件。其他面板中正在进行的导入也会取消；已导入的字体和当前设置保留。')) run(async () => { const r = await request({ op: 'cleanup_uploads' }); toast(`已清理 ${r.removed} 项未完成导入`); }); };
 $('#font-file').onchange = event => run(async () => {
-  const files = [...event.target.files]; let imported = 0; $('#import-progress').hidden = false;
-  try { for (const file of files) {
-    if (file.size > 256 * 1048576) throw new Error('单个字体不能超过 256 MiB');
-    let upload;
-    try { upload = await request({ op: 'upload_begin', size: file.size, label: file.name });
-      for (let offset = 0; offset < file.size; offset += 48 * 1024) { const chunk = new Uint8Array(await file.slice(offset, offset + 48 * 1024).arrayBuffer()); await request({ op: 'upload_chunk', token: upload.token, offset, chunk: base64(chunk) }); $('#import-meter').value = Math.round((offset + chunk.length) / file.size * 100); $('#import-message').textContent = `${file.name} · ${$('#import-meter').value}%`; }
-      await request({ op: 'upload_finish', token: upload.token }); imported++;
-    } catch (e) { if (upload) { try { await request({ op: 'upload_cancel', token: upload.token }); } catch { /* A later import can retry; never hide original failure. */ } } throw e; }
-  } await loadStatus(true); toast(`已导入 ${files.length} 个字体文件`);
-  } catch (e) {
-    // Files finished before the failure are already in the library; show them.
-    if (imported) { try { await loadStatus(true); } catch { /* keep the original error */ } }
-    throw new Error(imported ? `已导入 ${imported} 个文件，之后失败：${e.message}` : e.message);
+  $('#import-errors').hidden = true; const files = [...event.target.files]; const failed = []; let imported = 0; $('#import-progress').hidden = false;
+  try {
+    for (const file of files) {
+      let upload;
+      try {
+        if (file.size > 256 * 1048576) throw new Error('单个字体不能超过 256 MiB');
+        upload = await request({ op: 'upload_begin', size: file.size, label: file.name });
+        for (let offset = 0; offset < file.size; offset += 48 * 1024) { const chunk = new Uint8Array(await file.slice(offset, offset + 48 * 1024).arrayBuffer()); await request({ op: 'upload_chunk', token: upload.token, offset, chunk: base64(chunk) }); $('#import-meter').value = Math.round((offset + chunk.length) / file.size * 100); $('#import-message').textContent = `${file.name} · ${$('#import-meter').value}%`; }
+        await request({ op: 'upload_finish', token: upload.token }); imported++;
+      } catch (e) {
+        if (upload) { try { await request({ op: 'upload_cancel', token: upload.token }); } catch { /* A later import can retry; never hide original failure. */ } }
+        // Keep going: one bad file should not stop the rest of the batch.
+        failed.push(`${file.name}：${e.message}`);
+      }
+    }
+    if (imported) await loadStatus(true);
   } finally { $('#font-file').value = ''; $('#import-progress').hidden = true; }
+  if (!failed.length) { toast(`已导入 ${imported} 个字体文件`); return; }
+  const summary = `已导入 ${imported} 个，${failed.length} 个失败`;
+  toast(summary);
+  if (document.body.dataset.tab === 'library') renderImportErrors(summary, failed); else validation(summary, failed, true);
 });
 $('#preview-banner').hidden = !isPreview; renderTitle();
 if (!native && !isPreview) { $('#offline').hidden = false; $('#status-title').textContent = '尚未连接模块'; $('#status-description').textContent = '从模块管理器进入 WebUI 后可读取手机配置。'; renderSlots(); renderLibrary(); document.querySelectorAll('button,input,select').forEach(e => e.disabled = true); document.querySelectorAll('.tab-bar button').forEach(e => e.disabled = false); }

@@ -640,7 +640,8 @@ func (s *Store) Handle(r Request) (any, error) {
 		}
 		return s.Stage(*r.Profile)
 	case "restore":
-		return s.Stage(DefaultProfile())
+		// Keep the user's draft: restoring stages system fonts only.
+		return s.stage(DefaultProfile(), false)
 	case "cancel_pending":
 		return map[string]bool{"cancelled": true}, removeIfExists(s.data("pending"))
 	case "import_path":

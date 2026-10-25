@@ -703,3 +703,24 @@ func TestXiaomiNormalMapsToRegularWithoutChangingLight(t *testing.T) {
 		t.Fatalf("unexpected normal/light weights: %v", found)
 	}
 }
+
+func TestRestoreKeepsDraft(t *testing.T) {
+	s, a, _ := fixtureStore(t)
+	draft := variableProfile(a)
+	draft.Name = "Saved draft"
+	if _, e := s.Handle(Request{Op: "save", Profile: &draft}); e != nil {
+		t.Fatal(e)
+	}
+	before, _ := os.ReadFile(s.data("draft.json"))
+	if _, e := s.Handle(Request{Op: "restore"}); e != nil {
+		t.Fatal(e)
+	}
+	after, _ := os.ReadFile(s.data("draft.json"))
+	if string(before) != string(after) {
+		t.Fatalf("restore replaced the draft: %s", after)
+	}
+	pending, _ := s.generation("pending")
+	if pending == nil || !pending.Profile.IsSystem() {
+		t.Fatalf("restore did not stage system fonts: %+v", pending)
+	}
+}
