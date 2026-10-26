@@ -19,4 +19,8 @@ Mac 上如果安装了算力管家，按本机规则先查询额度并通过 `pe
 
 可选 `HFC_REAL_FONTS` 指向包含 `MiSansVF.ttf`、`MiSansLatinVF.ttf`、`xhs-font_normal.ttf` 的自有测试目录，启用历史真实字体的解析和字形数据保留检查。仓库和 Actions 不下载或分发这些文件。
 
+## 发布与在线更新
+
+`module.prop` 的 `updateJson` 指向 `releases/latest/download/update.json`。在 GitHub 以 `v版本号` 标签（如 `v2.2.0`，须与 `module.prop` 一致）发布正式版后，`Release assets` 工作流用该标签的源码重新构建，并把 ZIP、SHA-256、`update.json`、`changelog.md`（取自 CHANGELOG 对应小节）附到这个 Release。Root 管理器随后提示更新。预发布版不算 latest，不会推送；标签与版本号不一致时工作流失败，不上传任何文件。
+
 只更新版本时，同时修改 `module/module.prop`、安装提示、Web 页脚、`internal/engine/model.go` 和 `tools/build.py`。发布必须使用通过检查的同一提交生成的 ZIP。

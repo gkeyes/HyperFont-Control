@@ -1,0 +1,48 @@
+name: Release assets
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+jobs:
+  assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang lld
+      - name: Build and validate
+        env:
+          HFC_BUILD_JOBS: '2'
+          HFC_CLANG: /usr/bin/clang++
+          HFC_LLD: /usr/bin/ld.lld
+        run: python3 tools/build.py
+      - name: Write update.json and changelog
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: python3 tools/release_files.py "$TAG"
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/HyperFont-Control-*.zip dist/HyperFont-Control-*.zip.sha256 dist/update.json dist/changelog.md --clobber --repo "$GITHUB_REPOSITORY"

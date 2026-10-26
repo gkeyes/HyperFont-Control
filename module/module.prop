@@ -1,6 +1,7 @@
 id=hyperfont_control
 name=HyperFont Control
-version=2.1.0
-versionCode=2001000
+version=2.2.0
+versionCode=2002000
 author=Jian
 description=Portable font profiles with a local WebUI. Variable/static weights, HyperOS default-weight compatibility via Zygisk, and reboot-only ephemeral mounts.
+updateJson=https://github.com/gkeyes/HyperFont-Control/releases/latest/download/update.json

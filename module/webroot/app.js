@@ -18,7 +18,7 @@ const native = typeof window.ksu?.exec === 'function';
 let serial = 0, busy = false, status, dirty = false, toastTimer;
 let profile = { schemaVersion: 1, name: '我的字体组合', activation: 'manual-reboot', slots: Object.fromEntries(slots.map(([key]) => [key, { mode: 'system' }])) };
 let fonts = [];
-let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50;
+let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50, shiftBases = {}, modeMemory = {};
 const libraryPageSize = 6;
 
 
@@ -58,6 +58,16 @@ function faceList(key, mode, italic = false) { return fonts.flatMap(a => a.faces
 function faceMeta(id, index = 0) { return fonts.find(f => f.id === id)?.faces.find(f => f.index === index); }
 function option(value, label) { const e = text('option', label); e.value = value; return e; }
 function selectField(label, options, value, change) { const wrap = text('label', '', 'field'); wrap.append(text('span', label)); const select = document.createElement('select'); select.setAttribute('aria-label', label); options.forEach(([v, l]) => select.append(option(v, l))); select.value = value; select.addEventListener('change', () => { change(select.value); markDirty(); }); wrap.append(select); return wrap; }
+// Switching font type brings back what this slot last had in that type: this session's edits first, then the pending or active configuration.
+function rememberedSlot(key, mode) {
+  if (mode === 'system') return null;
+  const found = [modeMemory[key]?.[mode], status?.pending?.profile?.slots?.[key], status?.active?.profile?.slots?.[key]].find(x => x?.mode === mode);
+  if (!found) return null;
+  const slot = structuredClone(found); const has = (id, index) => !!faceMeta(id, index);
+  if (mode === 'variable') { if (!has(slot.assetId, slot.faceIndex)) { slot.assetId = ''; slot.faceIndex = 0; } if (slot.italicAssetId && !has(slot.italicAssetId, slot.italicFaceIndex)) { delete slot.italicAssetId; delete slot.italicFaceIndex; } }
+  else slot.faces = (slot.faces || []).filter(r => has(r.assetId, r.faceIndex));
+  return slot;
+}
 function defaultMap(slot) { const a = faceMeta(slot.assetId, slot.faceIndex)?.axes.find(a => a.tag === 'wght'); return Object.fromEntries(weights.map(w => [w, a ? Math.max(a.min, Math.min(a.max, w)) : w])); }
 function setRef(slot, value, italic = false) { const [id, index] = value.split(':'); if (italic) { if (id) { slot.italicAssetId = id; slot.italicFaceIndex = Number(index); } else { delete slot.italicAssetId; delete slot.italicFaceIndex; } } else { slot.assetId = id; slot.faceIndex = Number(index || 0); slot.axes = {}; delete slot.savedWeightMap; if (slot.familyMode === 'instances') slot.weightMap = defaultMap(slot); } }
 function slotSummary(s) { if (s.mode === 'system') return '沿用系统字体'; if (s.mode === 'variable') return faceMeta(s.assetId, s.faceIndex)?.name || '选择一个可变字体'; return s.faces.length ? `静态多字重 · ${s.faces.length} 个字重面` : '选择静态字重文件'; }
@@ -94,7 +104,8 @@ function renderSlots(openKey) {
   const editor = text('section', '', 'slot-editor glass'); editor.dataset.slot = key;
   if (editorStep === 'font') {
     editor.append(segmentedField('字体类型', [['system', '沿用系统'], ['variable', '可变字体'], ['static', '静态多字重']], s.mode, mode => {
-      profile.slots[key] = mode === 'system' ? { mode } : mode === 'variable' ? { mode, assetId: '', faceIndex: 0, familyMode: 'instances', weightMap: Object.fromEntries(weights.map(w => [w, w])) } : { mode, missingWeightPolicy: 'nearest', faces: [] }; renderSlots();
+      (modeMemory[key] ??= {})[s.mode] = structuredClone(s);
+      profile.slots[key] = rememberedSlot(key, mode) || (mode === 'system' ? { mode } : mode === 'variable' ? { mode, assetId: '', faceIndex: 0, familyMode: 'instances', weightMap: Object.fromEntries(weights.map(w => [w, w])) } : { mode, missingWeightPolicy: 'nearest', faces: [] }); renderSlots();
     }));
     if (s.mode === 'system') editor.append(text('p', '这一类沿用系统字体。选择“可变字体”或“静态多字重”后，可从字体库指定文件。', 'field-help'));
     if (s.mode === 'variable') {
@@ -119,7 +130,15 @@ function renderSlots(openKey) {
       if (s.familyMode === 'instances') {
         editor.append(text('p', '左侧是应用请求的字重，右侧填写该文件实际使用的轴值。', 'field-help'));
         const shift = text('div', '', 'weight-shift'); const amount = document.createElement('input'); amount.type = 'number'; amount.step = 'any'; amount.inputMode = 'decimal'; amount.value = shiftAmount; amount.oninput = () => shiftAmount = amount.value; amount.setAttribute('aria-label', '统一调整的数值');
-        const applyShift = sign => { const delta = Number(amount.value); if (!Number.isFinite(delta) || delta === 0) { toast('请输入要统一调整的数值'); return; } s.weightMap = shiftWeightMap(s.weightMap, sign * delta, wght); markDirty(); renderSlots(); toast(`九档已统一${sign > 0 ? '加' : '减'} ${delta}${wght ? `，超出 ${wght.min}–${wght.max} 的已封顶` : ''}`); };
+        const applyShift = sign => {
+          const delta = Number(amount.value); if (!Number.isFinite(delta) || delta === 0) { toast('请输入要统一调整的数值'); return; }
+          // Shift from the values before the first shift, so capped steps get their spacing back when shifted the other way.
+          let shiftBase = shiftBases[selectedSlot]; if (shiftBase?.last !== JSON.stringify(s.weightMap)) shiftBase = shiftBases[selectedSlot] = { map: {...s.weightMap}, offset: 0 };
+          shiftBase.offset += sign * delta;
+          const raw = shiftWeightMap(shiftBase.map, shiftBase.offset); s.weightMap = shiftWeightMap(shiftBase.map, shiftBase.offset, wght); shiftBase.last = JSON.stringify(s.weightMap);
+          const capped = weights.some(w => raw[w] !== s.weightMap[w]);
+          markDirty(); renderSlots(); toast(`九档已统一${sign > 0 ? '加' : '减'} ${delta}${capped ? `，超出 ${wght.min}–${wght.max} 的已封顶` : ''}`);
+        };
         const minus = text('button', '整体减', 'glass-button'); minus.type = 'button'; minus.onclick = () => applyShift(-1);
         const plus = text('button', '整体加', 'glass-button'); plus.type = 'button'; plus.onclick = () => applyShift(1);
         shift.append(text('span', '统一调整'), minus, amount, plus); editor.append(shift);
@@ -190,7 +209,7 @@ function renderStatus() {
   const compat = status.fontCompatibility;
   if (compat?.needed) dl.append(text('dt', '小米默认字重'), text('dd', compat.preparedThisBoot ? '兼容层已准备；需启用 Zygisk，应用效果待验收' : '请启用 Zygisk，并手动重启以加载兼容层'));
 }
-async function loadStatus(keepDraft = false) { $('#validation').hidden = true; status = await request({ op: 'status' }); fonts = status.library || []; if (!keepDraft) { profile = structuredClone(status.draft); dirty = false; $('#profile-name').value = profile.name; } renderStatus(); renderSlots(); renderLibrary(); }
+async function loadStatus(keepDraft = false) { $('#validation').hidden = true; status = await request({ op: 'status' }); fonts = status.library || []; if (!keepDraft) { profile = structuredClone(status.draft); modeMemory = {}; shiftBases = {}; dirty = false; $('#profile-name').value = profile.name; } renderStatus(); renderSlots(); renderLibrary(); }
 function currentProfile() { profile.name = $('#profile-name').value.trim(); const encoded = JSON.stringify(profile); if (encoded.includes(':null')) throw new Error('请填写所有字重与轴值'); return profile; }
 function moveSlot(step) { const index = slots.findIndex(([key]) => key === selectedSlot) + step; if (index < 0 || index >= slots.length) return; renderSlots(slots[index][0]); window.scrollTo(0, 0); }
 function setStep(step) { editorStep = step; renderSlots(); window.scrollTo(0, 0); }
