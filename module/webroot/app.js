@@ -209,7 +209,7 @@ function renderStatus() {
   const compat = status.fontCompatibility;
   if (compat?.needed) dl.append(text('dt', '小米默认字重'), text('dd', compat.preparedThisBoot ? '兼容层已准备；需启用 Zygisk，应用效果待验收' : '请启用 Zygisk，并手动重启以加载兼容层'));
 }
-async function loadStatus(keepDraft = false) { $('#validation').hidden = true; status = await request({ op: 'status' }); fonts = status.library || []; if (!keepDraft) { profile = structuredClone(status.draft); dirty = false; $('#profile-name').value = profile.name; } renderStatus(); renderSlots(); renderLibrary(); }
+async function loadStatus(keepDraft = false) { $('#validation').hidden = true; status = await request({ op: 'status' }); fonts = status.library || []; if (!keepDraft) { profile = structuredClone(status.draft); modeMemory = {}; shiftBases = {}; dirty = false; $('#profile-name').value = profile.name; } renderStatus(); renderSlots(); renderLibrary(); }
 function currentProfile() { profile.name = $('#profile-name').value.trim(); const encoded = JSON.stringify(profile); if (encoded.includes(':null')) throw new Error('请填写所有字重与轴值'); return profile; }
 function moveSlot(step) { const index = slots.findIndex(([key]) => key === selectedSlot) + step; if (index < 0 || index >= slots.length) return; renderSlots(slots[index][0]); window.scrollTo(0, 0); }
 function setStep(step) { editorStep = step; renderSlots(); window.scrollTo(0, 0); }
