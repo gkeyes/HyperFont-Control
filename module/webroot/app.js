@@ -18,7 +18,7 @@ const native = typeof window.ksu?.exec === 'function';
 let serial = 0, busy = false, status, dirty = false, toastTimer;
 let profile = { schemaVersion: 1, name: '我的字体组合', activation: 'manual-reboot', slots: Object.fromEntries(slots.map(([key]) => [key, { mode: 'system' }])) };
 let fonts = [];
-let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50, shiftBase = null;
+let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50, shiftBases = {}, modeMemory = {};
 const libraryPageSize = 6;
 
 
@@ -58,6 +58,16 @@ function faceList(key, mode, italic = false) { return fonts.flatMap(a => a.faces
 function faceMeta(id, index = 0) { return fonts.find(f => f.id === id)?.faces.find(f => f.index === index); }
 function option(value, label) { const e = text('option', label); e.value = value; return e; }
 function selectField(label, options, value, change) { const wrap = text('label', '', 'field'); wrap.append(text('span', label)); const select = document.createElement('select'); select.setAttribute('aria-label', label); options.forEach(([v, l]) => select.append(option(v, l))); select.value = value; select.addEventListener('change', () => { change(select.value); markDirty(); }); wrap.append(select); return wrap; }
+// Switching font type brings back what this slot last had in that type: this session's edits first, then the pending or active configuration.
+function rememberedSlot(key, mode) {
+  if (mode === 'system') return null;
+  const found = [modeMemory[key]?.[mode], status?.pending?.profile?.slots?.[key], status?.active?.profile?.slots?.[key]].find(x => x?.mode === mode);
+  if (!found) return null;
+  const slot = structuredClone(found); const has = (id, index) => !!faceMeta(id, index);
+  if (mode === 'variable') { if (!has(slot.assetId, slot.faceIndex)) { slot.assetId = ''; slot.faceIndex = 0; } if (slot.italicAssetId && !has(slot.italicAssetId, slot.italicFaceIndex)) { delete slot.italicAssetId; delete slot.italicFaceIndex; } }
+  else slot.faces = (slot.faces || []).filter(r => has(r.assetId, r.faceIndex));
+  return slot;
+}
 function defaultMap(slot) { const a = faceMeta(slot.assetId, slot.faceIndex)?.axes.find(a => a.tag === 'wght'); return Object.fromEntries(weights.map(w => [w, a ? Math.max(a.min, Math.min(a.max, w)) : w])); }
 function setRef(slot, value, italic = false) { const [id, index] = value.split(':'); if (italic) { if (id) { slot.italicAssetId = id; slot.italicFaceIndex = Number(index); } else { delete slot.italicAssetId; delete slot.italicFaceIndex; } } else { slot.assetId = id; slot.faceIndex = Number(index || 0); slot.axes = {}; delete slot.savedWeightMap; if (slot.familyMode === 'instances') slot.weightMap = defaultMap(slot); } }
 function slotSummary(s) { if (s.mode === 'system') return '沿用系统字体'; if (s.mode === 'variable') return faceMeta(s.assetId, s.faceIndex)?.name || '选择一个可变字体'; return s.faces.length ? `静态多字重 · ${s.faces.length} 个字重面` : '选择静态字重文件'; }
@@ -94,7 +104,8 @@ function renderSlots(openKey) {
   const editor = text('section', '', 'slot-editor glass'); editor.dataset.slot = key;
   if (editorStep === 'font') {
     editor.append(segmentedField('字体类型', [['system', '沿用系统'], ['variable', '可变字体'], ['static', '静态多字重']], s.mode, mode => {
-      profile.slots[key] = mode === 'system' ? { mode } : mode === 'variable' ? { mode, assetId: '', faceIndex: 0, familyMode: 'instances', weightMap: Object.fromEntries(weights.map(w => [w, w])) } : { mode, missingWeightPolicy: 'nearest', faces: [] }; renderSlots();
+      (modeMemory[key] ??= {})[s.mode] = structuredClone(s);
+      profile.slots[key] = rememberedSlot(key, mode) || (mode === 'system' ? { mode } : mode === 'variable' ? { mode, assetId: '', faceIndex: 0, familyMode: 'instances', weightMap: Object.fromEntries(weights.map(w => [w, w])) } : { mode, missingWeightPolicy: 'nearest', faces: [] }); renderSlots();
     }));
     if (s.mode === 'system') editor.append(text('p', '这一类沿用系统字体。选择“可变字体”或“静态多字重”后，可从字体库指定文件。', 'field-help'));
     if (s.mode === 'variable') {
@@ -122,7 +133,7 @@ function renderSlots(openKey) {
         const applyShift = sign => {
           const delta = Number(amount.value); if (!Number.isFinite(delta) || delta === 0) { toast('请输入要统一调整的数值'); return; }
           // Shift from the values before the first shift, so capped steps get their spacing back when shifted the other way.
-          if (shiftBase?.slot !== selectedSlot || shiftBase.last !== JSON.stringify(s.weightMap)) shiftBase = { slot: selectedSlot, map: {...s.weightMap}, offset: 0 };
+          let shiftBase = shiftBases[selectedSlot]; if (shiftBase?.last !== JSON.stringify(s.weightMap)) shiftBase = shiftBases[selectedSlot] = { map: {...s.weightMap}, offset: 0 };
           shiftBase.offset += sign * delta;
           const raw = shiftWeightMap(shiftBase.map, shiftBase.offset); s.weightMap = shiftWeightMap(shiftBase.map, shiftBase.offset, wght); shiftBase.last = JSON.stringify(s.weightMap);
           const capped = weights.some(w => raw[w] !== s.weightMap[w]);
