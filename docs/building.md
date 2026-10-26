@@ -21,6 +21,8 @@ Mac 上如果安装了算力管家，按本机规则先查询额度并通过 `pe
 
 ## 发布与在线更新
 
-`module.prop` 的 `updateJson` 指向 `releases/latest/download/update.json`。在 GitHub 以 `v版本号` 标签（如 `v2.2.0`，须与 `module.prop` 一致）发布正式版后，`Release assets` 工作流用该标签的源码重新构建，并把 ZIP、SHA-256、`update.json`、`changelog.md`（取自 CHANGELOG 对应小节）附到这个 Release。Root 管理器随后提示更新。预发布版不算 latest，不会推送；标签与版本号不一致时工作流失败，不上传任何文件。
+`module.prop` 的 `updateJson` 指向 `releases/latest/download/update.json`。推送到 main 后，`Build module` 工作流在构建通过后检查 `v版本号` 是否已有 Release；没有就用这次构建的 ZIP 自动发布正式版（标记为 latest），附上 ZIP、SHA-256、`update.json`、`changelog.md`（取自 CHANGELOG 对应小节）。附件随 Release 一起创建，发布后立即可用。版本号没变的推送不会重发。因此每个要发布的改动都必须提升版本号并写 CHANGELOG 小节。
+
+也可以手动发布：以 `v版本号` 标签发布正式版后，`Release assets` 工作流重新构建该标签并附上同样的文件；标签与版本号不一致时失败、不上传。手动发布的工作流失败时，请删除该 Release 或重跑工作流，否则 latest 没有 `update.json`，手机查不到更新。不要把旧版本的重新发布标为 latest。
 
 只更新版本时，同时修改 `module/module.prop`、安装提示、Web 页脚、`internal/engine/model.go` 和 `tools/build.py`。发布必须使用通过检查的同一提交生成的 ZIP。
