@@ -118,15 +118,17 @@ function renderSlots(openKey) {
       editor.append(segmentedField('字重方式', [['instances', '自定义九档'], ['continuous', '按请求连续变化']], s.familyMode, mode => { changeWeightMode(s, mode, defaultMap); renderSlots(); }));
       if (s.familyMode === 'instances') {
         editor.append(text('p', '左侧是应用请求的字重，右侧填写该文件实际使用的轴值。', 'field-help'));
-        const rows = text('div', '', 'weight-rows');
+        const rows = text('div', '', 'weight-rows'); const checks = [];
+        // Mirror the engine's rule: each value inside the axis, never below the step before it.
+        const markRows = () => { let prev = -Infinity; for (const [w, row] of checks) { const n = s.weightMap[w]; const bad = !Number.isFinite(n) || (wght && (n < wght.min || n > wght.max)) || n < prev; row.classList.toggle('invalid', bad); row.title = bad ? (Number.isFinite(n) && n < prev ? `不能小于上一档 ${prev}` : `需在 ${wght ? `${wght.min}–${wght.max}` : '字体范围'} 之内`) : ''; if (Number.isFinite(n)) prev = Math.max(prev, n); } };
         for (const w of weights) {
           const row = text('label', '', `weight-row${w === 400 ? ' regular' : ''}`); const bar = text('span', '', 'weight-bar'); const fill = document.createElement('i'); bar.append(fill);
           const input = document.createElement('input'); input.type = 'number'; input.step = 'any'; input.inputMode = 'decimal'; input.value = s.weightMap[w]; input.setAttribute('aria-label', `${title}请求 ${w} 的实际轴值`); if (wght) { input.min = wght.min; input.max = wght.max; }
           fill.style.width = weightBar(s.weightMap[w], wght);
-          input.oninput = () => { s.weightMap[w] = input.value === '' ? NaN : Number(input.value); fill.style.width = weightBar(s.weightMap[w] || 0, wght); markDirty(); };
-          row.append(text('span', w === 400 ? '400 常规' : String(w)), bar, input); rows.append(row);
+          input.oninput = () => { s.weightMap[w] = input.value === '' ? NaN : Number(input.value); fill.style.width = weightBar(s.weightMap[w] || 0, wght); markDirty(); markRows(); };
+          row.append(text('span', w === 400 ? '400 常规' : String(w)), bar, input); rows.append(row); checks.push([w, row]);
         }
-        editor.append(rows);
+        markRows(); editor.append(rows);
       } else editor.append(text('p', '按应用请求选取字重，例如常规 400 使用文件轴 400。要自行加粗或减细，请选择“自定义九档”。原来的九档设置会保留，切回后恢复；保存并提交后需手动重启。', 'field-help'));
       const axes = meta?.axes.filter(a => a.tag !== 'wght') || [];
       if (axes.length) {
