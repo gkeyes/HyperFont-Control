@@ -42,3 +42,32 @@ jobs:
           name: HyperFont-Control
           path: dist/*
           if-no-files-found: error
+  release:
+    # Every push to main whose module.prop version has no release yet becomes the official (latest) release.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: module
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: HyperFont-Control
+          path: dist
+      - name: Publish the release if this version has none
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^version=//p' module/module.prop)
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v$version already released; nothing to do"
+            exit 0
+          fi
+          python3 tools/release_files.py "v$version"
+          gh release create "v$version" dist/HyperFont-Control-*.zip dist/HyperFont-Control-*.zip.sha256 dist/update.json dist/changelog.md \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "HyperFont Control $version" --notes-file dist/changelog.md --latest
