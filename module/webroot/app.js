@@ -18,7 +18,7 @@ const native = typeof window.ksu?.exec === 'function';
 let serial = 0, busy = false, status, dirty = false, toastTimer;
 let profile = { schemaVersion: 1, name: '我的字体组合', activation: 'manual-reboot', slots: Object.fromEntries(slots.map(([key]) => [key, { mode: 'system' }])) };
 let fonts = [];
-let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50;
+let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50, shiftBase = null;
 const libraryPageSize = 6;
 
 
@@ -119,7 +119,15 @@ function renderSlots(openKey) {
       if (s.familyMode === 'instances') {
         editor.append(text('p', '左侧是应用请求的字重，右侧填写该文件实际使用的轴值。', 'field-help'));
         const shift = text('div', '', 'weight-shift'); const amount = document.createElement('input'); amount.type = 'number'; amount.step = 'any'; amount.inputMode = 'decimal'; amount.value = shiftAmount; amount.oninput = () => shiftAmount = amount.value; amount.setAttribute('aria-label', '统一调整的数值');
-        const applyShift = sign => { const delta = Number(amount.value); if (!Number.isFinite(delta) || delta === 0) { toast('请输入要统一调整的数值'); return; } s.weightMap = shiftWeightMap(s.weightMap, sign * delta, wght); markDirty(); renderSlots(); toast(`九档已统一${sign > 0 ? '加' : '减'} ${delta}${wght ? `，超出 ${wght.min}–${wght.max} 的已封顶` : ''}`); };
+        const applyShift = sign => {
+          const delta = Number(amount.value); if (!Number.isFinite(delta) || delta === 0) { toast('请输入要统一调整的数值'); return; }
+          // Shift from the values before the first shift, so capped steps get their spacing back when shifted the other way.
+          if (shiftBase?.slot !== selectedSlot || shiftBase.last !== JSON.stringify(s.weightMap)) shiftBase = { slot: selectedSlot, map: {...s.weightMap}, offset: 0 };
+          shiftBase.offset += sign * delta;
+          const raw = shiftWeightMap(shiftBase.map, shiftBase.offset); s.weightMap = shiftWeightMap(shiftBase.map, shiftBase.offset, wght); shiftBase.last = JSON.stringify(s.weightMap);
+          const capped = weights.some(w => raw[w] !== s.weightMap[w]);
+          markDirty(); renderSlots(); toast(`九档已统一${sign > 0 ? '加' : '减'} ${delta}${capped ? `，超出 ${wght.min}–${wght.max} 的已封顶` : ''}`);
+        };
         const minus = text('button', '整体减', 'glass-button'); minus.type = 'button'; minus.onclick = () => applyShift(-1);
         const plus = text('button', '整体加', 'glass-button'); plus.type = 'button'; plus.onclick = () => applyShift(1);
         shift.append(text('span', '统一调整'), minus, amount, plus); editor.append(shift);

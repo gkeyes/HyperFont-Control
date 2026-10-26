@@ -11,7 +11,7 @@ import zipfile
 from build_compat import build as build_compat
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 CACHE = Path.home() / ".cache/hyperfont-control-build"
 CACHE.mkdir(parents=True, exist_ok=True)
 JOBS = max(1, min(8, int(os.environ.get("HFC_BUILD_JOBS", "1"))))
@@ -27,6 +27,12 @@ env["JAVA_TOOL_OPTIONS"] = f"-XX:ActiveProcessorCount={JOBS}"
 def run(args, **kwargs):
     subprocess.run([str(x) for x in args], cwd=ROOT, env=kwargs.pop("env", env), check=True, **kwargs)
 
+prop = dict(line.split("=", 1) for line in (ROOT / "module/module.prop").read_text().splitlines() if "=" in line)
+major, minor, patch = map(int, VERSION.split("."))
+if prop.get("version") != VERSION or prop.get("versionCode") != str(major * 1000000 + minor * 1000 + patch):
+    raise SystemExit("module.prop version/versionCode do not match tools/build.py VERSION")
+if not prop.get("updateJson", "").startswith("https://"):
+    raise SystemExit("module.prop needs an https updateJson for online updates")
 run(["go", "test", f"-p={JOBS}", "./..."])
 run(["go", "vet", f"-p={JOBS}", "./..."])
 run(["node", "--test", "tests/web_weights.test.mjs"])
