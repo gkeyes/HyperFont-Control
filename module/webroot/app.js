@@ -1,4 +1,4 @@
-import { changeWeightMode } from './weights.js';
+import { changeWeightMode, shiftWeightMap, weightMapProblems } from './weights.js';
 const $ = (q, root = document) => root.querySelector(q);
 const slots = [
   ['chinese', '中文', '汉', '汉字与全角标点', ''],
@@ -18,7 +18,7 @@ const native = typeof window.ksu?.exec === 'function';
 let serial = 0, busy = false, status, dirty = false, toastTimer;
 let profile = { schemaVersion: 1, name: '我的字体组合', activation: 'manual-reboot', slots: Object.fromEntries(slots.map(([key]) => [key, { mode: 'system' }])) };
 let fonts = [];
-let selectedSlot = null, editorStep = 'font', libraryPage = 1;
+let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50;
 const libraryPageSize = 6;
 
 
@@ -118,9 +118,13 @@ function renderSlots(openKey) {
       editor.append(segmentedField('字重方式', [['instances', '自定义九档'], ['continuous', '按请求连续变化']], s.familyMode, mode => { changeWeightMode(s, mode, defaultMap); renderSlots(); }));
       if (s.familyMode === 'instances') {
         editor.append(text('p', '左侧是应用请求的字重，右侧填写该文件实际使用的轴值。', 'field-help'));
-        const rows = text('div', '', 'weight-rows'); const checks = [];
-        // Mirror the engine's rule: each value inside the axis, never below the step before it.
-        const markRows = () => { let prev = -Infinity; for (const [w, row] of checks) { const n = s.weightMap[w]; const bad = !Number.isFinite(n) || (wght && (n < wght.min || n > wght.max)) || n < prev; row.classList.toggle('invalid', bad); row.title = bad ? (Number.isFinite(n) && n < prev ? `不能小于上一档 ${prev}` : `需在 ${wght ? `${wght.min}–${wght.max}` : '字体范围'} 之内`) : ''; if (Number.isFinite(n)) prev = Math.max(prev, n); } };
+        const shift = text('div', '', 'weight-shift'); const amount = document.createElement('input'); amount.type = 'number'; amount.step = 'any'; amount.inputMode = 'decimal'; amount.value = shiftAmount; amount.oninput = () => shiftAmount = amount.value; amount.setAttribute('aria-label', '统一调整的数值');
+        const applyShift = sign => { const delta = Number(amount.value); if (!Number.isFinite(delta) || delta === 0) { toast('请输入要统一调整的数值'); return; } s.weightMap = shiftWeightMap(s.weightMap, sign * delta, wght); markDirty(); renderSlots(); toast(`九档已统一${sign > 0 ? '加' : '减'} ${delta}${wght ? `，超出 ${wght.min}–${wght.max} 的已封顶` : ''}`); };
+        const minus = text('button', '整体减', 'glass-button'); minus.type = 'button'; minus.onclick = () => applyShift(-1);
+        const plus = text('button', '整体加', 'glass-button'); plus.type = 'button'; plus.onclick = () => applyShift(1);
+        shift.append(text('span', '统一调整'), minus, amount, plus); editor.append(shift);
+        const rows = text('div', '', 'weight-rows'); const checks = []; const problemHint = text('p', '', 'field-help weight-problem');
+        const markRows = () => { const problems = weightMapProblems(s.weightMap, weights, wght); for (const [w, row] of checks) { row.classList.toggle('invalid', !!problems[w]); row.title = problems[w]; } const first = weights.find(w => problems[w]); problemHint.textContent = first ? `${first} 档：${problems[first]}` : ''; problemHint.hidden = !first; };
         for (const w of weights) {
           const row = text('label', '', `weight-row${w === 400 ? ' regular' : ''}`); const bar = text('span', '', 'weight-bar'); const fill = document.createElement('i'); bar.append(fill);
           const input = document.createElement('input'); input.type = 'number'; input.step = 'any'; input.inputMode = 'decimal'; input.value = s.weightMap[w]; input.setAttribute('aria-label', `${title}请求 ${w} 的实际轴值`); if (wght) { input.min = wght.min; input.max = wght.max; }
@@ -128,7 +132,7 @@ function renderSlots(openKey) {
           input.oninput = () => { s.weightMap[w] = input.value === '' ? NaN : Number(input.value); fill.style.width = weightBar(s.weightMap[w] || 0, wght); markDirty(); markRows(); };
           row.append(text('span', w === 400 ? '400 常规' : String(w)), bar, input); rows.append(row); checks.push([w, row]);
         }
-        markRows(); editor.append(rows);
+        markRows(); editor.append(rows, problemHint);
       } else editor.append(text('p', '按应用请求选取字重，例如常规 400 使用文件轴 400。要自行加粗或减细，请选择“自定义九档”。原来的九档设置会保留，切回后恢复；保存并提交后需手动重启。', 'field-help'));
       const axes = meta?.axes.filter(a => a.tag !== 'wght') || [];
       if (axes.length) {
