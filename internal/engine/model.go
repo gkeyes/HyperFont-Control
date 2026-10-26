@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-const Version = "2.0.1"
+const Version = "2.0.2"
 const MaxFontSize = 256 << 20
 
 var assetPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -169,8 +169,13 @@ func (s *Store) Validate(p Profile) ([]string, error) {
 				prev := -math.MaxFloat64
 				for i := 100; i <= 900; i += 100 {
 					n, ok := v.WeightMap[fmt.Sprint(i)]
-					if !ok || math.IsNaN(n) || math.IsInf(n, 0) || n < w.Min || n > w.Max || n < prev {
-						return nil, fmt.Errorf("%s: %d 档轴值超界或不单调", key, i)
+					switch {
+					case !ok || math.IsNaN(n) || math.IsInf(n, 0):
+						return nil, fmt.Errorf("%s: %d 档轴值未填写", key, i)
+					case n < w.Min || n > w.Max:
+						return nil, fmt.Errorf("%s: %d 档轴值 %g 超出字体范围 %g–%g", key, i, n, w.Min, w.Max)
+					case n < prev:
+						return nil, fmt.Errorf("%s: %d 档轴值 %g 小于上一档的 %g，九档须从细到粗", key, i, n, prev)
 					}
 					prev = n
 				}

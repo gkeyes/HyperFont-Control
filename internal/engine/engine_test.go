@@ -724,3 +724,19 @@ func TestRestoreKeepsDraft(t *testing.T) {
 		t.Fatalf("restore did not stage system fonts: %+v", pending)
 	}
 }
+
+func TestWeightMapErrorsNameValueAndRange(t *testing.T) {
+	s, a, _ := fixtureStore(t)
+	p := variableProfile(a)
+	m := p.Slots["chinese"]
+	m.WeightMap["900"] = 5000
+	_, e := s.Validate(p)
+	if e == nil || !strings.Contains(e.Error(), "5000 超出字体范围") {
+		t.Fatalf("out of range: %v", e)
+	}
+	m.WeightMap["900"] = 750
+	_, e = s.Validate(p)
+	if e == nil || !strings.Contains(e.Error(), "750 小于上一档的 800") {
+		t.Fatalf("not monotonic: %v", e)
+	}
+}

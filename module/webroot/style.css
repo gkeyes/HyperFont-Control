@@ -121,6 +121,8 @@ body:not(.editing-font) #slots{display:grid;grid-template-columns:repeat(2,minma
 .weight-rows{display:flex;flex-direction:column;gap:2px}
 .weight-row{display:grid;grid-template-columns:58px 1fr 78px;align-items:center;gap:10px;min-height:44px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .weight-row.regular{color:var(--accent);font-weight:650}
+.weight-row.invalid{color:var(--danger)}
+.weight-row.invalid input{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 3px var(--danger-soft)}
 .weight-row input{min-height:38px;border-radius:12px;text-align:center;padding:0 6px;font-variant-numeric:tabular-nums}
 .weight-bar{height:6px;border-radius:3px;background:var(--accent-soft);overflow:hidden}
 .weight-bar i{display:block;height:100%;border-radius:3px;background:var(--accent);transition:width .15s}
