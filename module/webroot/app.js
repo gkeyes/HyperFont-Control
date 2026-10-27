@@ -1,5 +1,5 @@
 import { changeWeightMode, shiftWeightMap, weightMapProblems } from './weights.js';
-import { faceOptionLabel, fileStem, fontFamily, groupFonts, naturalCompare, spreadFamily } from './library.js';
+import { faceFamily, faceOptionLabel, fileStem, fontFamily, groupFonts, naturalCompare, spreadFamily } from './library.js';
 const $ = (q, root = document) => root.querySelector(q);
 const slots = [
   ['chinese', '中文', '汉', '汉字与全角标点', ''],
@@ -57,9 +57,9 @@ function validation(message, warnings = [], error = false) { resultBox($('#valid
 function renderImportErrors(message, items) { resultBox($('#import-errors'), message, items, true); $('#import-errors details').open = true; }
 async function run(fn) { if (busy) return; busy = true; document.querySelectorAll('button, input, select').forEach(e => e.disabled = true); try { await fn(); } catch (e) { toast(e.message); validation(e.message, [], true); } finally { busy = false; document.querySelectorAll('button, input, select').forEach(e => e.disabled = !(native || isPreview)); updateDownloadButton(); } }
 function confirmAction(title, message) { return new Promise(resolve => { const dialog = $('#confirm-dialog'); $('#dialog-title').textContent = title; $('#dialog-text').textContent = message; const finish = result => { dialog.close(); resolve(result); }; $('#dialog-ok').disabled = false; $('#dialog-cancel').disabled = false; $('#dialog-ok').onclick = () => finish(true); $('#dialog-cancel').onclick = () => finish(false); dialog.oncancel = e => { e.preventDefault(); finish(false); }; dialog.showModal(); }); }
-function faceList(key, mode, italic = false) { return fonts.flatMap(a => a.faces.filter(f => (key === 'chinese' ? f.chinese : f.latin) && f.italic === italic && (mode === 'variable' ? f.axes.length > 0 && f.axes.some(x => x.tag === 'wght') : f.axes.length === 0)).map(f => ({ asset: a, face: f, value: `${a.id}:${f.index}` }))).sort((x, y) => naturalCompare(fontFamily(x.asset), fontFamily(y.asset)) || naturalCompare(x.asset.label, y.asset.label) || x.face.index - y.face.index); }
+function faceList(key, mode, italic = false) { return fonts.flatMap(a => a.faces.filter(f => (key === 'chinese' ? f.chinese : f.latin) && f.italic === italic && (mode === 'variable' ? f.axes.length > 0 && f.axes.some(x => x.tag === 'wght') : f.axes.length === 0)).map(f => ({ asset: a, face: f, value: `${a.id}:${f.index}` }))).sort((x, y) => naturalCompare(faceFamily(x.face) || fontFamily(x.asset), faceFamily(y.face) || fontFamily(y.asset)) || naturalCompare(x.asset.label, y.asset.label) || x.face.index - y.face.index); }
 // Picker options grouped by font family, labelled by the file each face came from.
-function faceOptions(select, list) { const groups = new Map(); for (const o of list) { const family = fontFamily(o.asset); if (!groups.has(family)) groups.set(family, []); groups.get(family).push(o); } for (const [family, items] of groups) { const parent = items.length > 1 ? Object.assign(document.createElement('optgroup'), { label: `${family} · ${items.length}` }) : select; const sameWeight = new Set(items.map(o => o.face.weight)).size === 1 && items.length > 1; items.forEach(o => parent.append(option(o.value, faceOptionLabel(o.asset, o.face, !sameWeight)))); if (parent !== select) select.append(parent); } }
+function faceOptions(select, list) { const groups = new Map(); for (const o of list) { const family = faceFamily(o.face) || fontFamily(o.asset); if (!groups.has(family)) groups.set(family, []); groups.get(family).push(o); } for (const [family, items] of groups) { const parent = items.length > 1 ? Object.assign(document.createElement('optgroup'), { label: `${family} · ${items.length}` }) : select; const sameWeight = new Set(items.map(o => o.face.weight)).size === 1 && items.length > 1; items.forEach(o => parent.append(option(o.value, faceOptionLabel(o.asset, o.face, !sameWeight)))); if (parent !== select) select.append(parent); } }
 function faceMeta(id, index = 0) { return fonts.find(f => f.id === id)?.faces.find(f => f.index === index); }
 function option(value, label) { const e = text('option', label); e.value = value; return e; }
 function selectField(label, options, value, change, faces = []) { const wrap = text('label', '', 'field'); wrap.append(text('span', label)); const select = document.createElement('select'); select.setAttribute('aria-label', label); options.forEach(([v, l]) => select.append(option(v, l))); faceOptions(select, faces); select.value = value; select.addEventListener('change', () => { change(select.value); markDirty(); }); wrap.append(select); return wrap; }
@@ -122,14 +122,14 @@ function renderSlots(openKey) {
     }
     if (s.mode === 'static') {
       const entries = [...faceList(key, 'static'), ...faceList(key, 'static', true)];
-      const families = [...new Set(entries.map(o => fontFamily(o.asset)))];
+      const familyOf = o => faceFamily(o.face) || fontFamily(o.asset); const families = [...new Set(entries.map(familyOf))].sort(naturalCompare);
       if (!entries.length) editor.append(text('p', '字体库里还没有可用的静态字体。到“字体库”从 Download 文件夹导入后再来选择。', 'field-help'));
       else {
         // One pick fills all nine steps from the family; step ② shows the result for fine-tuning.
-        const current = s.faces.length ? fontFamily(fonts.find(f => f.id === s.faces[0].assetId) || { faces: [], label: '' }) : '';
-        editor.append(selectField('字体家族', [['', '选择后自动填入九档'], ...families.map(f => [f, `${f} · ${entries.filter(o => fontFamily(o.asset) === f).length} 个字体面`])], families.includes(current) ? current : '', family => {
+        const first = s.faces.length && entries.find(o => o.asset.id === s.faces[0].assetId && o.face.index === s.faces[0].faceIndex); const current = first ? familyOf(first) : '';
+        editor.append(selectField('字体家族', [['', '选择后自动填入九档'], ...families.map(f => [f, `${f} · ${entries.filter(o => familyOf(o) === f).length} 个字体面`])], families.includes(current) ? current : '', family => {
           if (!family) return;
-          s.faces = spreadFamily(entries.filter(o => fontFamily(o.asset) === family), weights); editorStep = 'weight'; renderSlots();
+          s.faces = spreadFamily(entries.filter(o => familyOf(o) === family), weights); editorStep = 'weight'; renderSlots();
           toast(`已用 ${family} 填入 ${new Set(s.faces.map(r => r.weight)).size} 档，可逐档调整`);
         }));
         editor.append(text('p', '选家族后按文件名从细到粗自动分配九档（文件自带不同字重时按字重），然后在“② 字重设置”逐档微调。', 'field-help'));
@@ -198,17 +198,26 @@ function fontTags(font) {
   if (font.faces.some(f => f.latin)) tags.push('英文');
   return tags;
 }
-// Where an asset is referenced: the draft being edited, the pending configuration, the active one.
-function fontUses(id) {
+// Where an asset is referenced. The engine refuses to delete fonts used by the saved draft,
+// the pending or the active configuration; unsaved edits only need re-picking afterwards.
+function fontUses(id, saved = true) {
   const refs = p => Object.values(p?.slots || {}).flatMap(x => [x.assetId, x.italicAssetId, ...(x.faces || []).map(r => r.assetId)]);
-  return [['当前草稿', profile], ['待生效配置', status?.pending?.profile], ['正在使用的配置', status?.active?.profile]].filter(([, p]) => refs(p).includes(id)).map(([name]) => name);
+  const sources = saved ? [['已保存的草稿', status?.draft], ['待生效配置', status?.pending?.profile], ['正在使用的配置', status?.active?.profile]] : [['未保存的编辑', profile]];
+  return sources.filter(([, p]) => refs(p).includes(id)).map(([name]) => name);
 }
 async function removeFonts(list) {
-  const used = [...new Set(list.flatMap(f => fontUses(f.id)))];
-  const what = list.length === 1 ? `“${fileStem(list[0].label)}”` : `这 ${list.length} 个文件`;
-  const note = used.length ? `${what}被${used.join('、')}使用。移除后草稿里对应的选择需要重新指定；正在使用的字体由模块保留到恢复或更换配置。` : '移除后无法撤销，需要时请重新导入。';
-  if (!await confirmAction(list.length === 1 ? '移除字体' : `移除整组 ${list.length} 个文件`, `从模块字体库移除${what}？${note}`)) return;
-  run(async () => { let removed = 0; for (const f of list) { await request({ op: 'delete_font', id: f.id }); removed++; } await loadStatus(true); toast(`已从字体库移除 ${removed} 个文件`); });
+  const blocked = list.filter(f => fontUses(f.id).length), removable = list.filter(f => !fontUses(f.id).length);
+  const why = [...new Set(blocked.flatMap(f => fontUses(f.id)))].join('、');
+  if (!removable.length) { toast(`${list.length === 1 ? fileStem(list[0].label) : '这组文件'}正被${why}使用，先在“字体设置”换成别的字体并保存，再来移除`); return; }
+  const what = removable.length === 1 ? `“${fileStem(removable[0].label)}”` : `${removable.length} 个文件`;
+  const notes = [blocked.length ? `其中 ${blocked.length} 个正被${why}使用，会保留。` : '', removable.some(f => fontUses(f.id, false).length) ? '当前未保存的编辑用到了它，移除后需要重新选择。' : '', '移除后无法撤销，需要时请重新导入。'].join('');
+  if (!await confirmAction(list.length === 1 ? '移除字体' : '移除整组', `从模块字体库移除${what}？${notes}`)) return;
+  run(async () => {
+    let removed = 0;
+    try { for (const f of removable) { await request({ op: 'delete_font', id: f.id }); removed++; } }
+    finally { await loadStatus(true); }
+    toast(`已从字体库移除 ${removed} 个文件${blocked.length ? `，${blocked.length} 个仍在使用已保留` : ''}`);
+  });
 }
 function fontEntry(font, compact) {
   const item = text('article', '', `font-entry${compact ? ' compact' : ''}`);
@@ -274,7 +283,7 @@ $('#library-prev').onclick = () => { if ($('#library-prev').classList.contains('
 for (const key of ['coverage', 'runtime']) $('#show-' + key).onclick = () => { $('#coverage-page').hidden = key !== 'coverage'; $('#runtime-page').hidden = key !== 'runtime'; pressed('#show-coverage', key === 'coverage'); pressed('#show-runtime', key === 'runtime'); };
 $('#refresh').onclick = () => run(async () => { if (!dirty || await confirmAction('重新读取配置', '这会放弃尚未保存的编辑。')) await loadStatus(); });
 $('#validate').onclick = () => run(async () => { const r = await request({ op: 'validate', profile: currentProfile() }); validation('配置检查通过', r.warnings); });
-$('#save').onclick = () => run(async () => { const r = await request({ op: 'save', profile: currentProfile() }); dirty = false; validation('草稿已保存，尚未提交生效', r.warnings); toast('草稿已保存'); });
+$('#save').onclick = () => run(async () => { const saved = currentProfile(); const r = await request({ op: 'save', profile: saved }); status.draft = structuredClone(saved); dirty = false; validation('草稿已保存，尚未提交生效', r.warnings); toast('草稿已保存'); });
 $('#stage').onclick = () => run(async () => { const r = await request({ op: 'stage', profile: currentProfile() }); dirty = false; selectedSlot = null; await loadStatus(); validation('已保存待生效配置。请手动重启后检查通知、设置和常用应用。', r.warnings); toast('已保存，等待你手动重启'); });
 $('#restore').onclick = async () => { if (await confirmAction('恢复系统字体', '将保存一份系统字体配置，手动重启后撤销本模块的覆盖。字体库和你的草稿仍保留。')) run(async () => { await request({ op: 'restore' }); await loadStatus(true); toast('已准备恢复，手动重启后生效'); }); };
 $('#cancel-pending').onclick = () => run(async () => { await request({ op: 'cancel_pending' }); await loadStatus(true); toast('已取消待生效配置'); });

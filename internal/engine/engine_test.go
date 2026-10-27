@@ -781,4 +781,16 @@ func TestDownloadFontsListsAndMarksImported(t *testing.T) {
 	if !list[0].Imported && !list[1].Imported {
 		t.Fatalf("imported file not marked: %+v", list)
 	}
+	// Same name and size but different bytes is not the imported font.
+	changed := append([]byte{}, font...)
+	changed[len(changed)-1] ^= 0xff
+	if e = os.WriteFile(filepath.Join(downloads, "A-25S.ttf"), changed, 0o644); e != nil {
+		t.Fatal(e)
+	}
+	list, _ = s.DownloadFonts()
+	for _, f := range list {
+		if f.Name == "A-25S.ttf" && f.Imported {
+			t.Fatal("changed file still marked imported")
+		}
+	}
 }

@@ -57,9 +57,22 @@ func (s *Store) DownloadFonts() ([]DownloadFont, error) {
 	if e != nil {
 		return nil, e
 	}
-	known := map[string]bool{}
+	// Name and size pick candidates cheaply; only those get hashed to confirm the content.
+	known := map[string]map[string]bool{}
 	for _, a := range library {
-		known[fmt.Sprint(a.Label, "\x00", a.Size)] = true
+		key := fmt.Sprint(a.Label, "\x00", a.Size)
+		if known[key] == nil {
+			known[key] = map[string]bool{}
+		}
+		known[key][a.ID] = true
+	}
+	imported := func(path, name string, size int64) bool {
+		ids := known[fmt.Sprint(name, "\x00", size)]
+		if ids == nil {
+			return false
+		}
+		b, err := os.ReadFile(path)
+		return err == nil && ids[digest(b)]
 	}
 	out := []DownloadFont{}
 	var walk func(string, int)
@@ -89,7 +102,7 @@ func (s *Store) DownloadFonts() ([]DownloadFont, error) {
 			if depth > 0 {
 				folder = filepath.Base(d)
 			}
-			out = append(out, DownloadFont{path, entry.Name(), info.Size(), info.ModTime().Unix(), known[fmt.Sprint(entry.Name(), "\x00", info.Size())], folder})
+			out = append(out, DownloadFont{path, entry.Name(), info.Size(), info.ModTime().Unix(), imported(path, entry.Name(), info.Size()), folder})
 		}
 	}
 	walk(dir, 0)
