@@ -84,6 +84,7 @@ func (p Profile) IsSystem() bool {
 	}
 	return true
 }
+
 // slotTitles are the category names the panel shows, for messages about one category.
 var slotTitles = map[string]string{"chinese": "中文", "latinSans": "无衬线英文", "serif": "衬线英文", "monospace": "等宽英文"}
 
