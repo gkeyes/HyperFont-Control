@@ -7,6 +7,7 @@
 | status | 无 | 字体库、草稿、active/pending、当前启动记录与文件可见性 |
 | init | 无 | 首次读取 ROM 原生字体表 |
 | import_path | path, 可选 label | 仅从 Download 导入；返回内容哈希和元数据 |
+| list_downloads | 无 | 列出 Download 及其下一层文件夹里的字体（跳过隐藏文件）；返回 path、name、size、modified、imported、folder。找不到 Download 时报错 |
 | upload_begin | label, size | 随机 token |
 | upload_chunk | token, offset, chunk | Base64 字节，最大 48 KiB；严格检查连续偏移 |
 | upload_finish | token | 解析并登记字体；未完成文件不进入字体库 |

@@ -39,26 +39,58 @@ export function faceOptionLabel(font, face, withWeight = true) {
   return parts.join(' · ');
 }
 
-// Fill the nine weight steps from a family's static files. Files that declare
-// distinct weights go to their own steps; otherwise (many families declare 400 in
-// every file and encode the weight in the name) they are spread thinnest first
-// in file-name order.
-// Returns face refs for each style; steps without a file are left out.
+const weightWords = { thin: 100, hairline: 100, extralight: 200, ultralight: 200, light: 300, regular: 400, normal: 400, book: 400, roman: 400, medium: 500, semibold: 600, demibold: 600, demi: 600, bold: 700, extrabold: 800, ultrabold: 800, heavy: 800, black: 900, extrablack: 900, ultrablack: 900 };
+
+// Weight written in a name, e.g. "Noto-SemiBold", "Hiragino W6" or "Font_300".
+// The last match wins, since the style usually comes last; null when there is none.
+export function nameWeight(name) {
+  const words = String(name || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  let found = null;
+  for (let i = 0; i < words.length; i++) {
+    const pair = weightWords[words[i] + (words[i + 1] || '')];
+    if (pair && i + 1 < words.length) { found = pair; i++; continue; }
+    const w = words[i];
+    if (weightWords[w]) found = weightWords[w];
+    else if (/^[1-9]00$/.test(w)) found = Number(w);
+    else if (/^w[1-9]$/.test(w)) found = Number(w[1]) * 100;
+  }
+  return found;
+}
+
+// Fill the nine weight steps from a family's static files. A file whose declared weight
+// no other file shares goes to that step. Files that share one (many families declare
+// 400 in every file) go to the weight in their file or face name when that is unique;
+// the rest are spread over the free steps thinnest first in file-name order.
+// Returns face refs for each style; refs not set from a declared weight carry guess: true.
 export function spreadFamily(entries, weights) {
   const out = [];
+  const step = w => Math.min(weights[weights.length - 1], Math.max(weights[0], Math.round(w / 100) * 100));
   for (const style of ['normal', 'italic']) {
     const list = entries.filter(e => !!e.face.italic === (style === 'italic'));
     if (!list.length) continue;
-    const distinct = new Set(list.map(e => e.face.weight)).size === list.length;
-    list.sort((a, b) => (distinct ? a.face.weight - b.face.weight : 0) || naturalCompare(a.asset.label, b.asset.label) || a.face.index - b.face.index);
-    const n = list.length, last = weights.length - 1;
-    const pick = (e, weight) => out.push({ assetId: e.asset.id, faceIndex: e.face.index, weight, style });
-    // Files that declare their own distinct weights go to those steps.
-    const declared = list.map(e => Math.min(weights[last], Math.max(weights[0], Math.round(e.face.weight / 100) * 100)));
-    if (distinct && new Set(declared).size === n && declared.every(w => weights.includes(w))) list.forEach((e, j) => pick(e, declared[j]));
-    else if (n >= weights.length) weights.forEach((w, i) => pick(list[Math.round(i * (n - 1) / last)], w));
-    else if (n === 1) pick(list[0], 400);
-    else list.forEach((e, j) => pick(e, weights[Math.round(j * last / (n - 1))]));
+    const pick = (e, weight, guess) => out.push({ assetId: e.asset.id, faceIndex: e.face.index, weight, style, ...(guess ? { guess: true } : {}) });
+    const taken = new Map(), count = (map, w) => map.set(w, (map.get(w) || 0) + 1), declared = new Map();
+    list.forEach(e => count(declared, step(e.face.weight)));
+    let rest = [];
+    for (const e of list) { const w = step(e.face.weight); if (declared.get(w) === 1 && weights.includes(w)) taken.set(w, e); else rest.push(e); }
+    const named = new Map(), guessOf = e => nameWeight(fileStem(e.asset.label)) ?? nameWeight(e.face.name);
+    rest.forEach(e => { const w = guessOf(e); if (w) count(named, w); });
+    rest = rest.filter(e => { const w = guessOf(e); if (w && named.get(w) === 1 && weights.includes(w) && !taken.has(w)) { taken.set(w, e); e.named = true; return false; } return true; });
+    for (const [w, e] of taken) pick(e, w, e.named);
+    list.forEach(e => delete e.named);
+    rest.sort((a, b) => a.face.weight - b.face.weight || naturalCompare(a.asset.label, b.asset.label) || a.face.index - b.face.index);
+    const free = weights.filter(w => !taken.has(w)), n = rest.length, last = free.length - 1;
+    if (!n || !free.length) continue;
+    if (n >= free.length) free.forEach((w, i) => pick(rest[last ? Math.round(i * (n - 1) / last) : Math.floor((n - 1) / 2)], w, true));
+    else if (n === 1) pick(rest[0], free.includes(400) ? 400 : free[Math.floor(last / 2)], true);
+    else rest.forEach((e, j) => pick(e, free[Math.round(j * last / (n - 1))], true));
   }
-  return out;
+  return out.sort((a, b) => (a.style === 'italic') - (b.style === 'italic') || a.weight - b.weight);
+}
+
+// Groups Download files by folder (top level first), each in natural order of name.
+export function groupDownloads(files) {
+  const groups = new Map();
+  for (const f of files) { const key = f.folder || ''; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(f); }
+  return [...groups].sort(([a], [b]) => (a === '') !== (b === '') ? (a === '' ? -1 : 1) : naturalCompare(a, b)).map(([folder, list]) => ({ folder, files: list.sort((a, b) => naturalCompare(a.name, b.name)) }));
 }

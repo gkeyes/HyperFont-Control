@@ -750,12 +750,16 @@ func TestDownloadFontsListsAndMarksImported(t *testing.T) {
 		}
 	}
 	font := fixtureFont(false)
-	for _, p := range []string{"A-25S.ttf", "fonts/B.OTF", "fonts/deep/C.ttf", ".hidden/D.ttf"} {
+	for _, p := range []string{"A-25S.ttf", "fonts/B.OTF", "fonts/deep/C.ttf", ".hidden/D.ttf", "._A-25S.ttf"} {
 		if e := os.WriteFile(filepath.Join(downloads, p), font, 0o644); e != nil {
 			t.Fatal(e)
 		}
 	}
 	_ = os.WriteFile(filepath.Join(downloads, "notes.txt"), font, 0o644)
+	missing := &Store{Root: filepath.Join(root, "data"), RomRoot: root, Downloads: filepath.Join(root, "nowhere")}
+	if _, e := missing.DownloadFonts(); e == nil || !strings.Contains(e.Error(), "找不到 Download 文件夹") {
+		t.Fatalf("missing Download folder: %v", e)
+	}
 	s := &Store{Root: filepath.Join(root, "data"), RomRoot: root, Downloads: downloads}
 	list, e := s.DownloadFonts()
 	if e != nil {

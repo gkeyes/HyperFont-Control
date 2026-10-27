@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-const Version = "2.3.0"
+const Version = "2.4.0"
 const MaxFontSize = 256 << 20
 
 var assetPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -228,7 +228,10 @@ func (s *Store) Validate(p Profile) ([]string, error) {
 			if v.AssetID != "" || v.ItalicAssetID != "" || v.FamilyMode != "" || len(v.Axes)+len(v.WeightMap)+len(v.SavedWeightMap) > 0 {
 				return nil, fmt.Errorf("静态模式不接受可变参数")
 			}
-			if len(v.Faces) == 0 || len(v.Faces) > 18 || (v.MissingWeightPolicy != "reject" && v.MissingWeightPolicy != "nearest") {
+			if len(v.Faces) == 0 {
+				return nil, fmt.Errorf("静态多字重还没有选择字体文件，请在“① 选择字体”选一个字体家族")
+			}
+			if len(v.Faces) > 18 || (v.MissingWeightPolicy != "reject" && v.MissingWeightPolicy != "nearest") {
 				return nil, fmt.Errorf("静态字重配置无效")
 			}
 			seen := map[string]bool{}
