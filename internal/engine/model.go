@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-const Version = "2.4.0"
+const Version = "2.4.1"
 const MaxFontSize = 256 << 20
 
 var assetPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -84,6 +84,9 @@ func (p Profile) IsSystem() bool {
 	}
 	return true
 }
+// slotTitles are the category names the panel shows, for messages about one category.
+var slotTitles = map[string]string{"chinese": "中文", "latinSans": "无衬线英文", "serif": "衬线英文", "monospace": "等宽英文"}
+
 func (s *Store) lookup(id string, idx int) (Asset, Face, error) {
 	if !assetPattern.MatchString(id) {
 		return Asset{}, Face{}, fmt.Errorf("字体 ID 无效")
@@ -229,7 +232,7 @@ func (s *Store) Validate(p Profile) ([]string, error) {
 				return nil, fmt.Errorf("静态模式不接受可变参数")
 			}
 			if len(v.Faces) == 0 {
-				return nil, fmt.Errorf("静态多字重还没有选择字体文件，请在“① 选择字体”选一个字体家族")
+				return nil, fmt.Errorf("“%s”选了静态多字重但还没有字体文件，请在“① 选择字体”选一个字体家族", slotTitles[key])
 			}
 			if len(v.Faces) > 18 || (v.MissingWeightPolicy != "reject" && v.MissingWeightPolicy != "nearest") {
 				return nil, fmt.Errorf("静态字重配置无效")

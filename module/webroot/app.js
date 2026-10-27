@@ -89,19 +89,28 @@ function renderTitle() { const [title, subtitle] = pages[document.body.dataset.t
 function snapWeight(value, axis) { const lo = axis ? axis.min : 0, hi = axis ? axis.max : 1000; return Math.min(hi, Math.max(lo, Math.round(value / 25) * 25)); }
 // Range inputs jump to wherever the track is touched, and a page scroll that starts on one
 // changes it. The native input takes no pointer events (CSS); its wrapper changes the value
-// only for a drag that starts on the thumb, and a vertical swipe still scrolls the page.
+// only for a drag that starts on the thumb. A touch on the thumb becomes a drag only once
+// it moves sideways, so a vertical swipe that starts there still scrolls the page.
 function dragThumb(slider, change) {
   const wrap = text('span', '', 'slider-wrap'); const thumb = 24;
   const geometry = () => { const r = slider.getBoundingClientRect(), lo = Number(slider.min), hi = Number(slider.max); return { r, lo, hi, span: Math.max(1, r.width - thumb) }; };
   const valueAt = x => { const g = geometry(); return g.lo + Math.min(1, Math.max(0, (x - g.r.left - thumb / 2) / g.span)) * (g.hi - g.lo); };
   const thumbAt = () => { const g = geometry(); return g.r.left + thumb / 2 + (Number(slider.value) - g.lo) / (g.hi - g.lo || 1) * g.span; };
-  let pointer = null;
+  let pointer = null, pending = null;
+  const start = id => { pending = null; pointer = id; wrap.setPointerCapture(id); wrap.classList.add('dragging'); };
   wrap.addEventListener('pointerdown', e => {
     if (slider.disabled || pointer !== null || Math.abs(e.clientX - thumbAt()) > thumb) return;
-    e.preventDefault(); pointer = e.pointerId; wrap.setPointerCapture(pointer); wrap.classList.add('dragging');
+    if (e.pointerType === 'touch') pending = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    else { e.preventDefault(); start(e.pointerId); }
   });
-  wrap.addEventListener('pointermove', e => { if (e.pointerId === pointer) change(valueAt(e.clientX)); });
-  const end = e => { if (e.pointerId !== pointer) return; pointer = null; wrap.classList.remove('dragging'); };
+  wrap.addEventListener('pointermove', e => {
+    if (pending?.id === e.pointerId) {
+      const dx = Math.abs(e.clientX - pending.x), dy = Math.abs(e.clientY - pending.y);
+      if (dx > 6 && dx > dy) start(e.pointerId); else if (dy > 6) pending = null;
+    }
+    if (e.pointerId === pointer) change(valueAt(e.clientX));
+  });
+  const end = e => { if (pending?.id === e.pointerId) pending = null; if (e.pointerId !== pointer) return; pointer = null; wrap.classList.remove('dragging'); };
   wrap.addEventListener('pointerup', end); wrap.addEventListener('pointercancel', end);
   wrap.append(slider); return wrap;
 }
@@ -154,7 +163,7 @@ function renderSlots(openKey) {
         editor.append(selectField('字体家族', [['', '选择后自动填入九档'], ...families.map(f => [f, `${f} · ${entries.filter(o => familyOf(o) === f).length} 个字体面`])], families.includes(current) ? current : '', family => {
           if (!family) return;
           const refs = spreadFamily(entries.filter(o => familyOf(o) === family), weights);
-          s.faces = refs.map(({ guess, ...r }) => r); reviewSteps[key] = new Set(refs.filter(r => r.guess).map(r => `${r.style}:${r.weight}`)); editorStep = 'weight'; renderSlots();
+          s.faces = refs.map(({ guess, ...r }) => r); reviewSteps[key] = new Map(refs.filter(r => r.guess).map(r => [`${r.style}:${r.weight}`, r.guess === 'name' ? '按文件名推断' : '字重相同，按文件名顺序排'])); editorStep = 'weight'; renderSlots();
           const guessed = reviewSteps[key].size; toast(`已用 ${family} 填入 ${new Set(s.faces.map(r => r.weight)).size} 档${guessed ? `，标“请核对”的 ${guessed} 档是推断的，请看一眼` : ''}`);
         }));
         editor.append(text('p', '选家族后自动分配九档：文件自带的字重优先，其次看文件名里的 Light、Bold、W3、300 等，剩下的按文件名从细到粗排。推断出的档会标“请核对”。', 'field-help'));
@@ -187,14 +196,15 @@ function renderSlots(openKey) {
         const markRows = () => { const problems = weightMapProblems(s.weightMap, weights, wght); for (const [w, row] of checks) { row.classList.toggle('invalid', !!problems[w]); row.title = problems[w]; } const first = weights.find(w => problems[w]); problemHint.textContent = first ? `${first} 档：${problems[first]}` : ''; problemHint.hidden = !first; };
         for (const w of weights) {
           const row = text('label', '', `weight-row${w === 400 ? ' regular' : ''}`);
-          // Slider moves in steps of 25; the number box still takes any exact value.
-          const slider = document.createElement('input'); slider.type = 'range'; slider.className = 'weight-slider'; slider.step = 'any'; slider.setAttribute('aria-label', `${title}请求 ${w} 的轴值滑块`);
-          slider.min = wght ? wght.min : 0; slider.max = wght ? wght.max : 1000;
+          // Slider moves in steps of 25 (arrow keys and TalkBack too): its range is the axis widened
+          // to multiples of 25 and every value is clamped back into the axis. The number box takes any exact value.
+          const slider = document.createElement('input'); slider.type = 'range'; slider.className = 'weight-slider'; slider.step = 25; slider.setAttribute('aria-label', `${title}请求 ${w} 的轴值滑块`);
+          slider.min = wght ? Math.floor(wght.min / 25) * 25 : 0; slider.max = wght ? Math.ceil(wght.max / 25) * 25 : 1000; const track = { min: Number(slider.min), max: Number(slider.max) };
           const input = document.createElement('input'); input.type = 'number'; input.step = 'any'; input.inputMode = 'decimal'; input.value = s.weightMap[w]; input.setAttribute('aria-label', `${title}请求 ${w} 的实际轴值`); if (wght) { input.min = wght.min; input.max = wght.max; }
-          const syncSlider = () => { slider.value = Number.isFinite(s.weightMap[w]) ? s.weightMap[w] : slider.min; slider.style.setProperty('--fill', weightBar(Number(slider.value), wght)); };
+          const syncSlider = () => { slider.value = Number.isFinite(s.weightMap[w]) ? s.weightMap[w] : slider.min; slider.style.setProperty('--fill', weightBar(Number(slider.value), track)); };
           syncSlider();
           input.oninput = () => { s.weightMap[w] = input.value === '' ? NaN : Number(input.value); syncSlider(); markDirty(); markRows(); };
-          const setValue = value => { s.weightMap[w] = value; input.value = value; slider.value = value; slider.style.setProperty('--fill', weightBar(value, wght)); markDirty(); markRows(); };
+          const setValue = value => { s.weightMap[w] = value; input.value = value; slider.value = value; slider.style.setProperty('--fill', weightBar(value, track)); markDirty(); markRows(); };
           slider.oninput = () => setValue(snapWeight(Number(slider.value), wght));
           const sliderWrap = dragThumb(slider, value => setValue(snapWeight(value, wght)));
           row.append(text('span', w === 400 ? '400 常规' : String(w)), sliderWrap, input); rows.append(row); checks.push([w, row]);
@@ -209,9 +219,9 @@ function renderSlots(openKey) {
     }
     if (s.mode === 'static') {
       editor.append(selectField('缺少字重时', [['nearest', '使用最近的已有字重'], ['reject', '必须提供完整九档正体']], s.missingWeightPolicy, value => s.missingWeightPolicy = value));
-      if (reviewSteps[key]?.size) editor.append(text('p', '标“请核对”的档不是字体自带的字重，而是按文件名推断的，看一眼文件名对不对；改选后标记消失。', 'field-help review-hint'));
+      if (reviewSteps[key]?.size) editor.append(text('p', '标“请核对”的档不是按字体自带的字重填的：要么是看文件名里的 Light、Bold 等推断的，要么是几个文件字重相同、按文件名顺序排的。看一眼对不对；改选后标记消失。', 'field-help review-hint'));
       const table = document.createElement('table'); table.className = 'weight-table'; const head = document.createElement('thead'); const tr = document.createElement('tr'); ['请求', '正体文件', '斜体文件'].forEach(t => tr.append(text('th', t))); head.append(tr); table.append(head); const body = document.createElement('tbody');
-      for (const weight of weights) { const row = document.createElement('tr'); row.append(text('td', weight)); for (const style of ['normal', 'italic']) { const cell = document.createElement('td'); const sel = document.createElement('select'); sel.setAttribute('aria-label', `${title} ${weight} ${style === 'normal' ? '正体' : '斜体'}`); sel.append(option('', '未指定')); faceOptions(sel, faceList(key, 'static', style === 'italic')); const ref = s.faces.find(r => r.weight === weight && r.style === style); sel.value = ref ? `${ref.assetId}:${ref.faceIndex}` : ''; const mark = `${style}:${weight}`, check = reviewSteps[key]?.has(mark) && ref; const badge = text('span', '请核对', 'review-badge'); if (check) cell.classList.add('review'); sel.onchange = () => { s.faces = s.faces.filter(r => r.weight !== weight || r.style !== style); if (sel.value) { const [assetId, index] = sel.value.split(':'); s.faces.push({ assetId, faceIndex: Number(index), weight, style }); } reviewSteps[key]?.delete(mark); cell.classList.remove('review'); badge.remove(); markDirty(); }; cell.append(sel); if (check) cell.append(badge); row.append(cell); } body.append(row); } table.append(body); editor.append(table);
+      for (const weight of weights) { const row = document.createElement('tr'); row.append(text('td', weight)); for (const style of ['normal', 'italic']) { const cell = document.createElement('td'); const sel = document.createElement('select'); sel.setAttribute('aria-label', `${title} ${weight} ${style === 'normal' ? '正体' : '斜体'}`); sel.append(option('', '未指定')); faceOptions(sel, faceList(key, 'static', style === 'italic')); const ref = s.faces.find(r => r.weight === weight && r.style === style); sel.value = ref ? `${ref.assetId}:${ref.faceIndex}` : ''; const mark = `${style}:${weight}`, check = reviewSteps[key]?.has(mark) && ref; const badge = text('span', `请核对 · ${reviewSteps[key]?.get(mark) || ''}`, 'review-badge'); if (check) cell.classList.add('review'); sel.onchange = () => { s.faces = s.faces.filter(r => r.weight !== weight || r.style !== style); if (sel.value) { const [assetId, index] = sel.value.split(':'); s.faces.push({ assetId, faceIndex: Number(index), weight, style }); } reviewSteps[key]?.delete(mark); cell.classList.remove('review'); badge.remove(); markDirty(); }; cell.append(sel); if (check) cell.append(badge); row.append(cell); } body.append(row); } table.append(body); editor.append(table);
     }
   }
   root.append(editor);
@@ -380,7 +390,7 @@ async function loadDownloads() {
 function showImported(ids) {
   const added = fonts.filter(f => ids.includes(f.id)); if (!added.length) return;
   const groups = groupFonts(fonts), family = fontFamily(added[0]), at = groups.findIndex(g => g.family === family);
-  added.forEach(f => openGroups.add(fontFamily(f))); if (at >= 0) libraryPage = Math.floor(at / libraryPageSize) + 1;
+  openGroups.clear(); added.forEach(f => openGroups.add(fontFamily(f))); if (at >= 0) libraryPage = Math.floor(at / libraryPageSize) + 1;
   showTab('library'); renderLibrary();
   requestAnimationFrame(() => { const el = [...document.querySelectorAll('#font-list .font-group summary h3, #font-list .font-entry h3')].find(h => h.textContent === family || h.textContent === fileStem(added[0].label)); el?.closest('.font-group, .font-entry')?.scrollIntoView({ block: 'start' }); });
 }

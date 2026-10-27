@@ -12,7 +12,7 @@ cp "$MODPATH/bin/$HF_ARCH/hfctl" "$MODPATH/bin/hfctl" || abort "Cannot select ex
 set_perm "$MODPATH/bin/hfctl" 0 0 0755
 rm -rf "$MODPATH/bin/arm64" "$MODPATH/bin/x86_64"
 # webroot ownership/context is assigned by the manager, as required by KSU.
-ui_print "- HyperFont 2.4.0"
+ui_print "- HyperFont 2.4.1"
 ui_print "- Reading this ROM's font configuration..."
 HF_RESULT=$("$MODPATH/bin/hfctl" init)
 [ "$?" -eq 0 ] || abort "$HF_RESULT"

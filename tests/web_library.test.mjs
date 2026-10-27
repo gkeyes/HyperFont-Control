@@ -42,10 +42,10 @@ test('spreads sixteen same-weight files over nine steps by file name', async () 
   assert.deepEqual(spreadFamily(three, weights).map(r => `${r.weight}:${r.assetId}`), ['300:Light', '400:Regular', '700:Bold']);
 });
 
-test('spreads a few same-weight files evenly', async () => {
+test('puts a few same-weight files on the steps nearest their weight', async () => {
   const { spreadFamily } = await import('../module/webroot/library.js');
   const three = ['A', 'B', 'C'].map(n => ({ asset: { id: n, label: `${n}.ttf` }, face: { index: 0, weight: 400, italic: false } }));
-  assert.deepEqual(spreadFamily(three, [100, 200, 300, 400, 500, 600, 700, 800, 900]).map(r => `${r.weight}:${r.assetId}`), ['100:A', '500:B', '900:C']);
+  assert.deepEqual(spreadFamily(three, [100, 200, 300, 400, 500, 600, 700, 800, 900]).map(r => `${r.weight}:${r.assetId}`), ['300:A', '400:B', '500:C']);
 });
 
 test('reads weights written in names', async () => {
@@ -73,4 +73,14 @@ test('groups Download files by folder in natural order', async () => {
   const { groupDownloads } = await import('../module/webroot/library.js');
   const groups = groupDownloads([{ name: 'B-10.ttf', folder: 'fonts' }, { name: 'B-9.ttf', folder: 'fonts' }, { name: 'A.ttf' }, { name: 'C.ttf', folder: 'Abc' }]);
   assert.deepEqual(groups.map(g => [g.folder, g.files.map(f => f.name)]), [['', ['A.ttf']], ['Abc', ['C.ttf']], ['fonts', ['B-9.ttf', 'B-10.ttf']]]);
+});
+
+test('files sharing declared and name weights take the nearest free steps', async () => {
+  const { spreadFamily } = await import('../module/webroot/library.js');
+  const W = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+  const f = (label, weight, name = 'X Regular') => ({ asset: { id: label, label: `${label}.ttf` }, face: { index: 0, name, weight, italic: false } });
+  const show = refs => refs.map(r => `${r.weight}:${r.assetId}${r.guess ? `?${r.guess}` : ''}`);
+  assert.deepEqual(show(spreadFamily([f('Fam-Light', 300), f('Fam-Book', 400), f('Fam-Regular', 400), f('Fam-Bold', 700)], W)), ['300:Fam-Light', '400:Fam-Book?name', '500:Fam-Regular?order', '700:Fam-Bold']);
+  assert.deepEqual(show(spreadFamily([f('A', 400, 'A'), f('B', 400, 'B')], W)), ['400:A?order', '700:B?order']);
+  assert.deepEqual(show(spreadFamily([f('H-Bold', 400), f('H-BoldCondensed', 400), f('H-Regular', 400)], W)), ['400:H-Regular?name', '700:H-Bold?name', '800:H-BoldCondensed?order']);
 });
