@@ -47,3 +47,30 @@ test('spreads a few same-weight files evenly', async () => {
   const three = ['A', 'B', 'C'].map(n => ({ asset: { id: n, label: `${n}.ttf` }, face: { index: 0, weight: 400, italic: false } }));
   assert.deepEqual(spreadFamily(three, [100, 200, 300, 400, 500, 600, 700, 800, 900]).map(r => `${r.weight}:${r.assetId}`), ['100:A', '500:B', '900:C']);
 });
+
+test('reads weights written in names', async () => {
+  const { nameWeight } = await import('../module/webroot/library.js');
+  assert.equal(nameWeight('NotoSansSC-SemiBold'), 600);
+  assert.equal(nameWeight('MiSans-ExtraLight'), 200);
+  assert.equal(nameWeight('Source Han Sans Extra Light'), 200);
+  assert.equal(nameWeight('Hiragino W6'), 600);
+  assert.equal(nameWeight('Font_300'), 300);
+  assert.equal(nameWeight('HYQiHeiClassic-25S'), null);
+  assert.equal(nameWeight('Highlight'), null);
+});
+
+test('keeps distinct declared weights when only some files collide', async () => {
+  const { spreadFamily } = await import('../module/webroot/library.js');
+  const f = (label, weight) => ({ asset: { id: label, label: `${label}.ttf` }, face: { index: 0, name: 'X Regular', weight, italic: false } });
+  // Light and Bold declare their own weights; Medium and Black wrongly declare 400 but say so in the name.
+  const refs = spreadFamily([f('X-Light', 300), f('X-Bold', 700), f('X-Regular', 400), f('X-Medium', 400), f('X-Black', 400)], [100, 200, 300, 400, 500, 600, 700, 800, 900]);
+  const normal = refs.map(r => `${r.weight}:${r.assetId}${r.guess ? '?' : ''}`);
+  assert.deepEqual(normal.filter(r => ['300', '700', '500', '900'].includes(r.split(':')[0])), ['300:X-Light', '500:X-Medium?', '700:X-Bold', '900:X-Black?']);
+  assert.ok(normal.includes('400:X-Regular?'));
+});
+
+test('groups Download files by folder in natural order', async () => {
+  const { groupDownloads } = await import('../module/webroot/library.js');
+  const groups = groupDownloads([{ name: 'B-10.ttf', folder: 'fonts' }, { name: 'B-9.ttf', folder: 'fonts' }, { name: 'A.ttf' }, { name: 'C.ttf', folder: 'Abc' }]);
+  assert.deepEqual(groups.map(g => [g.folder, g.files.map(f => f.name)]), [['', ['A.ttf']], ['Abc', ['C.ttf']], ['fonts', ['B-9.ttf', 'B-10.ttf']]]);
+});

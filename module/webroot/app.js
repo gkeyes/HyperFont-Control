@@ -1,5 +1,5 @@
 import { changeWeightMode, shiftWeightMap, weightMapProblems } from './weights.js';
-import { faceFamily, faceOptionLabel, fileStem, fontFamily, groupFonts, naturalCompare, spreadFamily } from './library.js';
+import { faceFamily, faceOptionLabel, fileStem, fontFamily, groupDownloads, groupFonts, naturalCompare, spreadFamily } from './library.js';
 const $ = (q, root = document) => root.querySelector(q);
 const slots = [
   ['chinese', '中文', '汉', '汉字与全角标点', ''],
@@ -11,6 +11,7 @@ const weights = Array.from({ length: 9 }, (_, i) => (i + 1) * 100);
 const pages = {
   settings: ['字体', () => '选择喜欢的字，保留自己的习惯。'],
   library: ['字体库', () => `${fonts.length} 个文件 · TTF、OTF、TTC/OTC，可变与静态自动识别`],
+  import: ['从 Download 导入', () => ''],
   diagnostics: ['诊断与恢复', () => '系统配置已覆盖，不等于每个应用都完成了显示验证。'],
 };
 const bootLabels = { mounted: '已挂载', system: '沿用系统字体', failed: '挂载未完成', guarded: '启动保护已暂停此配置', 'not-run-this-boot': '本次开机未运行' };
@@ -19,9 +20,10 @@ const native = typeof window.ksu?.exec === 'function';
 let serial = 0, busy = false, status, dirty = false, toastTimer;
 let profile = { schemaVersion: 1, name: '我的字体组合', activation: 'manual-reboot', slots: Object.fromEntries(slots.map(([key]) => [key, { mode: 'system' }])) };
 let fonts = [];
-let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50, shiftBases = {}, modeMemory = {};
+let selectedSlot = null, editorStep = 'font', libraryPage = 1, shiftAmount = 50, shiftBases = {}, modeMemory = {}, reviewSteps = {};
 const openGroups = new Set(), downloadChecked = new Set();
-let downloadFiles = [], downloadsLoaded = false;
+let downloadFiles = [], downloadError = '';
+const knownLabels = new Map();
 const libraryPageSize = 6;
 
 
@@ -50,12 +52,14 @@ async function request(payload) {
   return reply.data;
 }
 function markDirty() { dirty = true; $('#validation').hidden = true; }
+// Engine errors name fonts by ID; show the file name the user imported instead.
+function readable(message) { return String(message).replace(/字体未导入: ([0-9a-f]{12})/g, (all, id) => { const label = [...knownLabels].find(([k]) => k.startsWith(id))?.[1]; return label ? `字体已不在字体库: ${label}，请重新选择` : all; }); }
 function toast(message) { clearTimeout(toastTimer); $('#toast').textContent = message; $('#toast').hidden = false; toastTimer = setTimeout(() => $('#toast').hidden = true, 5000); }
 function humanMessage(message) { return message.replace(/chinese:/g, '中文：').replace(/latinSans:/g, '无衬线英文：').replace(/serif:/g, '衬线英文：').replace(/monospace:/g, '等宽英文：').replace(/OEM/g, '厂商').replace(/全局 Hook/g, '全局应用适配'); }
 function resultBox(box, message, items = [], error = false) { box.replaceChildren(); box.classList.toggle('error', error); if (items?.length) { const details = document.createElement('details'); details.append(text('summary', humanMessage(message) + ' · 查看说明')); const list = document.createElement('ul'); items.forEach(w => list.append(text('li', humanMessage(w)))); details.append(list); box.append(details); } else box.append(text('p', humanMessage(message))); box.hidden = false; box.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
 function validation(message, warnings = [], error = false) { resultBox($('#validation'), message, warnings, error); }
 function renderImportErrors(message, items) { resultBox($('#import-errors'), message, items, true); $('#import-errors details').open = true; }
-async function run(fn) { if (busy) return; busy = true; document.querySelectorAll('button, input, select').forEach(e => e.disabled = true); try { await fn(); } catch (e) { toast(e.message); validation(e.message, [], true); } finally { busy = false; document.querySelectorAll('button, input, select').forEach(e => e.disabled = !(native || isPreview)); updateDownloadButton(); } }
+async function run(fn) { if (busy) return; busy = true; document.querySelectorAll('button, input, select').forEach(e => e.disabled = true); try { await fn(); } catch (e) { const message = readable(e.message); toast(message); validation(message, [], true); } finally { busy = false; document.querySelectorAll('button, input, select').forEach(e => e.disabled = !(native || isPreview)); updateDownloadButton(); } }
 function confirmAction(title, message) { return new Promise(resolve => { const dialog = $('#confirm-dialog'); $('#dialog-title').textContent = title; $('#dialog-text').textContent = message; const finish = result => { dialog.close(); resolve(result); }; $('#dialog-ok').disabled = false; $('#dialog-cancel').disabled = false; $('#dialog-ok').onclick = () => finish(true); $('#dialog-cancel').onclick = () => finish(false); dialog.oncancel = e => { e.preventDefault(); finish(false); }; dialog.showModal(); }); }
 function faceList(key, mode, italic = false) { return fonts.flatMap(a => a.faces.filter(f => (key === 'chinese' ? f.chinese : f.latin) && f.italic === italic && (mode === 'variable' ? f.axes.length > 0 && f.axes.some(x => x.tag === 'wght') : f.axes.length === 0)).map(f => ({ asset: a, face: f, value: `${a.id}:${f.index}` }))).sort((x, y) => naturalCompare(faceFamily(x.face) || fontFamily(x.asset), faceFamily(y.face) || fontFamily(y.asset)) || naturalCompare(x.asset.label, y.asset.label) || x.face.index - y.face.index); }
 // Picker options grouped by font family, labelled by the file each face came from.
@@ -79,8 +83,28 @@ function slotSummary(s) { if (s.mode === 'system') return '沿用系统字体'; 
 function icon(d) { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', d); svg.append(path); return svg; }
 function segmentedField(label, options, value, change) { const wrap = text('div', '', 'field'); wrap.append(text('span', label)); const group = text('div', '', 'segmented'); group.setAttribute('role', 'group'); group.setAttribute('aria-label', label); for (const [v, l] of options) { const b = text('button', l); b.type = 'button'; b.setAttribute('aria-pressed', String(v === value)); b.onclick = () => { if (v === value) return; markDirty(); change(v); }; group.append(b); } wrap.append(group); return wrap; }
 function pressed(id, on) { $(id).setAttribute('aria-pressed', String(on)); }
-function showTab(tab) { if (tab === 'library' && !downloadsLoaded && $('#download-import').open && (native || isPreview)) setTimeout(() => run(loadDownloads)); if (tab !== document.body.dataset.tab) { $('#validation').hidden = true; $('#import-errors').hidden = true; } document.body.dataset.tab = tab; document.querySelectorAll('.tab-bar button').forEach(b => b.dataset.tab === tab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')); document.querySelectorAll('.tab-panel').forEach(p => p.hidden = p.id !== tab); renderTitle(); }
+function showTab(tab) { if (tab === 'import' && (native || isPreview)) setTimeout(() => run(loadDownloads)); if (tab !== document.body.dataset.tab) { $('#validation').hidden = true; $('#import-errors').hidden = true; } document.body.dataset.tab = tab; document.querySelectorAll('.tab-bar button').forEach(b => b.dataset.tab === (tab === 'import' ? 'library' : tab) ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')); document.querySelectorAll('.tab-panel').forEach(p => p.hidden = p.id !== tab); renderTitle(); }
 function renderTitle() { const [title, subtitle] = pages[document.body.dataset.tab]; $('#page-title').textContent = title; $('#page-subtitle').textContent = subtitle(); }
+// Slider values move in steps of 25 but never leave the axis, so both ends stay reachable.
+function snapWeight(value, axis) { const lo = axis ? axis.min : 0, hi = axis ? axis.max : 1000; return Math.min(hi, Math.max(lo, Math.round(value / 25) * 25)); }
+// Range inputs jump to wherever the track is touched, and a page scroll that starts on one
+// changes it. The native input takes no pointer events (CSS); its wrapper changes the value
+// only for a drag that starts on the thumb, and a vertical swipe still scrolls the page.
+function dragThumb(slider, change) {
+  const wrap = text('span', '', 'slider-wrap'); const thumb = 24;
+  const geometry = () => { const r = slider.getBoundingClientRect(), lo = Number(slider.min), hi = Number(slider.max); return { r, lo, hi, span: Math.max(1, r.width - thumb) }; };
+  const valueAt = x => { const g = geometry(); return g.lo + Math.min(1, Math.max(0, (x - g.r.left - thumb / 2) / g.span)) * (g.hi - g.lo); };
+  const thumbAt = () => { const g = geometry(); return g.r.left + thumb / 2 + (Number(slider.value) - g.lo) / (g.hi - g.lo || 1) * g.span; };
+  let pointer = null;
+  wrap.addEventListener('pointerdown', e => {
+    if (slider.disabled || pointer !== null || Math.abs(e.clientX - thumbAt()) > thumb) return;
+    e.preventDefault(); pointer = e.pointerId; wrap.setPointerCapture(pointer); wrap.classList.add('dragging');
+  });
+  wrap.addEventListener('pointermove', e => { if (e.pointerId === pointer) change(valueAt(e.clientX)); });
+  const end = e => { if (e.pointerId !== pointer) return; pointer = null; wrap.classList.remove('dragging'); };
+  wrap.addEventListener('pointerup', end); wrap.addEventListener('pointercancel', end);
+  wrap.append(slider); return wrap;
+}
 function weightBar(value, axis) { const lo = axis ? axis.min : 0, hi = axis ? axis.max : 1000; return `${Math.max(0, Math.min(100, (value - lo) / (hi - lo || 1) * 100))}%`; }
 function renderSlots(openKey) {
   if (openKey !== undefined) selectedSlot = openKey;
@@ -129,10 +153,11 @@ function renderSlots(openKey) {
         const first = s.faces.length && entries.find(o => o.asset.id === s.faces[0].assetId && o.face.index === s.faces[0].faceIndex); const current = first ? familyOf(first) : '';
         editor.append(selectField('字体家族', [['', '选择后自动填入九档'], ...families.map(f => [f, `${f} · ${entries.filter(o => familyOf(o) === f).length} 个字体面`])], families.includes(current) ? current : '', family => {
           if (!family) return;
-          s.faces = spreadFamily(entries.filter(o => familyOf(o) === family), weights); editorStep = 'weight'; renderSlots();
-          toast(`已用 ${family} 填入 ${new Set(s.faces.map(r => r.weight)).size} 档，可逐档调整`);
+          const refs = spreadFamily(entries.filter(o => familyOf(o) === family), weights);
+          s.faces = refs.map(({ guess, ...r }) => r); reviewSteps[key] = new Set(refs.filter(r => r.guess).map(r => `${r.style}:${r.weight}`)); editorStep = 'weight'; renderSlots();
+          const guessed = reviewSteps[key].size; toast(`已用 ${family} 填入 ${new Set(s.faces.map(r => r.weight)).size} 档${guessed ? `，标“请核对”的 ${guessed} 档是推断的，请看一眼` : ''}`);
         }));
-        editor.append(text('p', '选家族后按文件名从细到粗自动分配九档（文件自带不同字重时按字重），然后在“② 字重设置”逐档微调。', 'field-help'));
+        editor.append(text('p', '选家族后自动分配九档：文件自带的字重优先，其次看文件名里的 Light、Bold、W3、300 等，剩下的按文件名从细到粗排。推断出的档会标“请核对”。', 'field-help'));
       }
     }
   } else {
@@ -163,14 +188,16 @@ function renderSlots(openKey) {
         for (const w of weights) {
           const row = text('label', '', `weight-row${w === 400 ? ' regular' : ''}`);
           // Slider moves in steps of 25; the number box still takes any exact value.
-          const slider = document.createElement('input'); slider.type = 'range'; slider.className = 'weight-slider'; slider.step = 25; slider.setAttribute('aria-label', `${title}请求 ${w} 的轴值滑块`);
-          const lo = wght ? Math.ceil(wght.min / 25) * 25 : 0, hi = wght ? Math.floor(wght.max / 25) * 25 : 1000; slider.min = Math.min(lo, hi); slider.max = Math.max(lo, hi);
+          const slider = document.createElement('input'); slider.type = 'range'; slider.className = 'weight-slider'; slider.step = 'any'; slider.setAttribute('aria-label', `${title}请求 ${w} 的轴值滑块`);
+          slider.min = wght ? wght.min : 0; slider.max = wght ? wght.max : 1000;
           const input = document.createElement('input'); input.type = 'number'; input.step = 'any'; input.inputMode = 'decimal'; input.value = s.weightMap[w]; input.setAttribute('aria-label', `${title}请求 ${w} 的实际轴值`); if (wght) { input.min = wght.min; input.max = wght.max; }
           const syncSlider = () => { slider.value = Number.isFinite(s.weightMap[w]) ? s.weightMap[w] : slider.min; slider.style.setProperty('--fill', weightBar(Number(slider.value), wght)); };
           syncSlider();
           input.oninput = () => { s.weightMap[w] = input.value === '' ? NaN : Number(input.value); syncSlider(); markDirty(); markRows(); };
-          slider.oninput = () => { s.weightMap[w] = Number(slider.value); input.value = slider.value; slider.style.setProperty('--fill', weightBar(Number(slider.value), wght)); markDirty(); markRows(); };
-          row.append(text('span', w === 400 ? '400 常规' : String(w)), slider, input); rows.append(row); checks.push([w, row]);
+          const setValue = value => { s.weightMap[w] = value; input.value = value; slider.value = value; slider.style.setProperty('--fill', weightBar(value, wght)); markDirty(); markRows(); };
+          slider.oninput = () => setValue(snapWeight(Number(slider.value), wght));
+          const sliderWrap = dragThumb(slider, value => setValue(snapWeight(value, wght)));
+          row.append(text('span', w === 400 ? '400 常规' : String(w)), sliderWrap, input); rows.append(row); checks.push([w, row]);
         }
         markRows(); editor.append(rows, problemHint);
       } else editor.append(text('p', '按应用请求选取字重，例如常规 400 使用文件轴 400。要自行加粗或减细，请选择“自定义九档”。原来的九档设置会保留，切回后恢复；保存并提交后需手动重启。', 'field-help'));
@@ -182,8 +209,9 @@ function renderSlots(openKey) {
     }
     if (s.mode === 'static') {
       editor.append(selectField('缺少字重时', [['nearest', '使用最近的已有字重'], ['reject', '必须提供完整九档正体']], s.missingWeightPolicy, value => s.missingWeightPolicy = value));
+      if (reviewSteps[key]?.size) editor.append(text('p', '标“请核对”的档不是字体自带的字重，而是按文件名推断的，看一眼文件名对不对；改选后标记消失。', 'field-help review-hint'));
       const table = document.createElement('table'); table.className = 'weight-table'; const head = document.createElement('thead'); const tr = document.createElement('tr'); ['请求', '正体文件', '斜体文件'].forEach(t => tr.append(text('th', t))); head.append(tr); table.append(head); const body = document.createElement('tbody');
-      for (const weight of weights) { const row = document.createElement('tr'); row.append(text('td', weight)); for (const style of ['normal', 'italic']) { const cell = document.createElement('td'); const sel = document.createElement('select'); sel.setAttribute('aria-label', `${title} ${weight} ${style === 'normal' ? '正体' : '斜体'}`); sel.append(option('', '未指定')); faceOptions(sel, faceList(key, 'static', style === 'italic')); const ref = s.faces.find(r => r.weight === weight && r.style === style); sel.value = ref ? `${ref.assetId}:${ref.faceIndex}` : ''; sel.onchange = () => { s.faces = s.faces.filter(r => r.weight !== weight || r.style !== style); if (sel.value) { const [assetId, index] = sel.value.split(':'); s.faces.push({ assetId, faceIndex: Number(index), weight, style }); } markDirty(); }; cell.append(sel); row.append(cell); } body.append(row); } table.append(body); editor.append(table);
+      for (const weight of weights) { const row = document.createElement('tr'); row.append(text('td', weight)); for (const style of ['normal', 'italic']) { const cell = document.createElement('td'); const sel = document.createElement('select'); sel.setAttribute('aria-label', `${title} ${weight} ${style === 'normal' ? '正体' : '斜体'}`); sel.append(option('', '未指定')); faceOptions(sel, faceList(key, 'static', style === 'italic')); const ref = s.faces.find(r => r.weight === weight && r.style === style); sel.value = ref ? `${ref.assetId}:${ref.faceIndex}` : ''; const mark = `${style}:${weight}`, check = reviewSteps[key]?.has(mark) && ref; const badge = text('span', '请核对', 'review-badge'); if (check) cell.classList.add('review'); sel.onchange = () => { s.faces = s.faces.filter(r => r.weight !== weight || r.style !== style); if (sel.value) { const [assetId, index] = sel.value.split(':'); s.faces.push({ assetId, faceIndex: Number(index), weight, style }); } reviewSteps[key]?.delete(mark); cell.classList.remove('review'); badge.remove(); markDirty(); }; cell.append(sel); if (check) cell.append(badge); row.append(cell); } body.append(row); } table.append(body); editor.append(table);
     }
   }
   root.append(editor);
@@ -205,6 +233,20 @@ function fontUses(id, saved = true) {
   const sources = saved ? [['已保存的草稿', status?.draft], ['待生效配置', status?.pending?.profile], ['正在使用的配置', status?.active?.profile]] : [['未保存的编辑', profile]];
   return sources.filter(([, p]) => refs(p).includes(id)).map(([name]) => name);
 }
+// Drops removed files from unsaved edits so saving does not fail on a font that is gone.
+// Returns the titles of the categories that need a new pick.
+function forgetFonts(ids) {
+  const touched = [];
+  for (const [key, title] of slots) {
+    const x = profile.slots[key], before = JSON.stringify(x);
+    if (ids.has(x.assetId)) { x.assetId = ''; x.faceIndex = 0; }
+    if (ids.has(x.italicAssetId)) { delete x.italicAssetId; delete x.italicFaceIndex; }
+    if (x.faces?.some(r => ids.has(r.assetId))) x.faces = x.faces.filter(r => !ids.has(r.assetId));
+    if (JSON.stringify(x) !== before) touched.push(title);
+  }
+  if (touched.length) markDirty();
+  return touched;
+}
 async function removeFonts(list) {
   const blocked = list.filter(f => fontUses(f.id).length), removable = list.filter(f => !fontUses(f.id).length);
   const why = [...new Set(blocked.flatMap(f => fontUses(f.id)))].join('、');
@@ -214,9 +256,10 @@ async function removeFonts(list) {
   if (!await confirmAction(list.length === 1 ? '移除字体' : '移除整组', `从模块字体库移除${what}？${notes}`)) return;
   run(async () => {
     let removed = 0;
-    try { for (const f of removable) { await request({ op: 'delete_font', id: f.id }); removed++; } }
-    finally { await loadStatus(true); }
-    toast(`已从字体库移除 ${removed} 个文件${blocked.length ? `，${blocked.length} 个仍在使用已保留` : ''}`);
+    const gone = new Set(); let touched = [];
+    try { for (const f of removable) { await request({ op: 'delete_font', id: f.id }); gone.add(f.id); removed++; } }
+    finally { touched = forgetFonts(gone); await loadStatus(true); }
+    toast(`已从字体库移除 ${removed} 个文件${blocked.length ? `，${blocked.length} 个仍在使用已保留` : ''}${touched.length ? `；“${touched.join('、')}”需要重新选择字体` : ''}`);
   });
 }
 function fontEntry(font, compact) {
@@ -236,7 +279,7 @@ function renderLibrary() {
   const root = $('#font-list'); root.replaceChildren(); $('#font-count').textContent = fonts.length; renderTitle();
   const groups = groupFonts(fonts);
   $('#library-pages').hidden = groups.length <= libraryPageSize;
-  if (!fonts.length) { root.append(text('div', '还没有导入字体。\n点右上角“导入字体”或上方“从 Download 文件夹导入”添加文件，再回到“字体设置”选择它。', 'empty')); return; }
+  if (!fonts.length) { root.append(text('div', '还没有导入字体。\n点右上角“导入字体”从 Download 文件夹添加文件，再回到“字体设置”选择它。', 'empty')); return; }
   const pageCount = Math.max(1, Math.ceil(groups.length / libraryPageSize)); libraryPage = Math.min(pageCount, libraryPage);
   $('#library-page-label').textContent = `${libraryPage} / ${pageCount} 页`; $('#library-prev').classList.toggle('off', libraryPage === 1); $('#library-next').classList.toggle('off', libraryPage === pageCount);
   for (const group of groups.slice((libraryPage - 1) * libraryPageSize, libraryPage * libraryPageSize)) {
@@ -267,7 +310,7 @@ function renderStatus() {
   const compat = status.fontCompatibility;
   if (compat?.needed) dl.append(text('dt', '小米默认字重'), text('dd', compat.preparedThisBoot ? '兼容层已准备；需启用 Zygisk，应用效果待验收' : '请启用 Zygisk，并手动重启以加载兼容层'));
 }
-async function loadStatus(keepDraft = false) { $('#validation').hidden = true; status = await request({ op: 'status' }); fonts = status.library || []; if (!keepDraft) { profile = structuredClone(status.draft); modeMemory = {}; shiftBases = {}; dirty = false; $('#profile-name').value = profile.name; } renderStatus(); renderSlots(); renderLibrary(); }
+async function loadStatus(keepDraft = false) { $('#validation').hidden = true; status = await request({ op: 'status' }); fonts = status.library || []; fonts.forEach(f => knownLabels.set(f.id, f.label)); if (!keepDraft) { profile = structuredClone(status.draft); modeMemory = {}; shiftBases = {}; reviewSteps = {}; dirty = false; $('#profile-name').value = profile.name; } renderStatus(); renderSlots(); renderLibrary(); }
 function currentProfile() { profile.name = $('#profile-name').value.trim(); const encoded = JSON.stringify(profile); if (encoded.includes(':null')) throw new Error('请填写所有字重与轴值'); return profile; }
 function moveSlot(step) { const index = slots.findIndex(([key]) => key === selectedSlot) + step; if (index < 0 || index >= slots.length) return; renderSlots(slots[index][0]); window.scrollTo(0, 0); }
 function setStep(step) { editorStep = step; renderSlots(); window.scrollTo(0, 0); }
@@ -293,41 +336,76 @@ $('#export-profile').onclick = () => run(async () => { const p = currentProfile(
 $('#profile-file').onchange = event => run(async () => { const file = event.target.files[0]; if (!file) return; try { if (file.size > 65536) throw new Error('配置文件过大'); const p = JSON.parse(await file.text()); if (dirty && !await confirmAction('导入配置', '导入会替换当前草稿，尚未保存的编辑将丢失。')) return; await request({ op: 'save', profile: p }); await loadStatus(); toast('配置已导入为草稿，请检查后提交'); } finally { $('#profile-file').value = ''; } });
 $('#refresh-baseline').onclick = async () => { if (await confirmAction('重新识别系统', '适用于系统升级后。本模块仍在覆盖字体时，请先恢复系统字体并重启。')) run(async () => { await request({ op: 'refresh_baseline' }); await loadStatus(true); toast('已识别当前系统，请重新提交配置'); }); };
 // Download folder: list font files in the engine and import the ticked ones by path, no WebView upload.
+function downloadRow(f) {
+  const row = text('label', '', `download-row${f.imported ? ' done' : ''}`); const box = document.createElement('input'); box.type = 'checkbox'; box.checked = downloadChecked.has(f.path);
+  box.onchange = () => { box.checked ? downloadChecked.add(f.path) : downloadChecked.delete(f.path); renderDownloads(); };
+  const copy = text('span'); copy.append(text('strong', f.name), text('small', `${(f.size / 1048576).toFixed(1)} MiB`));
+  row.append(box, copy); if (f.imported) row.append(text('span', '已导入', 'tag')); return row;
+}
+// Selects every not-yet-imported file in the list, or clears them when all are selected.
+function toggleFresh(list) { const fresh = list.filter(f => !f.imported); const all = fresh.length && fresh.every(f => downloadChecked.has(f.path)); fresh.forEach(f => all ? downloadChecked.delete(f.path) : downloadChecked.add(f.path)); renderDownloads(); }
 function renderDownloads() {
   const root = $('#download-list'); root.replaceChildren();
-  if (!downloadFiles.length) root.append(text('div', native || isPreview ? 'Download 文件夹里没有 TTF、OTF、TTC、OTC 字体。把字体放进去后点“刷新列表”。' : '请从模块管理器打开此面板。', 'download-empty'));
-  for (const f of downloadFiles) {
-    const row = text('label', '', `download-row${f.imported ? ' done' : ''}`); const box = document.createElement('input'); box.type = 'checkbox'; box.checked = downloadChecked.has(f.path);
-    box.onchange = () => { box.checked ? downloadChecked.add(f.path) : downloadChecked.delete(f.path); updateDownloadButton(); };
-    const copy = text('span');
-    copy.append(text('strong', f.name), text('small', `${(f.size / 1048576).toFixed(1)} MiB${f.folder ? ` · ${f.folder}` : ''}`));
-    row.append(box, copy); if (f.imported) row.append(text('span', '已导入', 'tag')); root.append(row);
+  if (downloadError || !downloadFiles.length) {
+    const empty = text('div', '', 'download-empty');
+    if (!native && !isPreview) empty.append(text('span', '请从模块管理器打开此面板。'));
+    else if (downloadError) empty.append(text('strong', '读不到手机的 Download 文件夹'), text('span', '可能还没有这个文件夹，或模块没有读取权限。可以点上方“其他位置…”用文件选择器导入。'));
+    else empty.append(text('strong', 'Download 里没有字体文件'), text('span', '把 TTF、OTF、TTC、OTC 放进 Download（或它下一层的文件夹）后点“刷新列表”；也可以点“其他位置…”。'));
+    root.append(empty);
   }
+  const groups = groupDownloads(downloadFiles);
+  for (const g of groups) {
+    // Each folder gets a header with its own select toggle when there is more than one folder.
+    if (groups.length > 1) {
+      const head = text('div', '', 'download-folder'); const fresh = g.files.filter(f => !f.imported);
+      head.append(text('span', g.folder ? `${g.folder}（${g.files.length}）` : `Download（${g.files.length}）`));
+      if (fresh.length) { const pick = text('button', fresh.every(f => downloadChecked.has(f.path)) ? '取消此文件夹' : '全选此文件夹', 'glass-button'); pick.type = 'button'; pick.disabled = busy; pick.onclick = () => toggleFresh(g.files); head.append(pick); }
+      root.append(head);
+    }
+    g.files.forEach(f => root.append(downloadRow(f)));
+  }
+  $('#other-files').classList.toggle('highlight-pick', !!downloadError);
+  const fresh = downloadFiles.filter(f => !f.imported);
+  $('#download-all').textContent = fresh.length && fresh.every(f => downloadChecked.has(f.path)) ? '取消全选' : '全选未导入';
+  $('#download-summary').textContent = downloadError ? '未找到 Download 文件夹' : `${downloadFiles.length} 个字体文件，${fresh.length} 个未导入`;
   updateDownloadButton();
 }
 function updateDownloadButton() { const n = downloadChecked.size; $('#download-import-button').disabled = busy || !n || !(native || isPreview); $('#download-import-button').textContent = n ? `导入所选 ${n} 个` : '导入所选'; }
-async function loadDownloads() { downloadFiles = await request({ op: 'list_downloads' }); downloadsLoaded = true; const paths = new Set(downloadFiles.map(f => f.path)); for (const p of [...downloadChecked]) if (!paths.has(p)) downloadChecked.delete(p); renderDownloads(); }
-$('#download-import').ontoggle = () => { if ($('#download-import').open && (native || isPreview)) run(loadDownloads); };
+// A missing or unreadable Download folder is shown in the list, not as a toast on every visit.
+async function loadDownloads() {
+  try { downloadFiles = await request({ op: 'list_downloads' }); downloadError = ''; } catch (e) { downloadFiles = []; downloadError = e.message; }
+  const paths = new Set(downloadFiles.map(f => f.path)); for (const p of [...downloadChecked]) if (!paths.has(p)) downloadChecked.delete(p); renderDownloads();
+}
+// After an import, go back to the library and open the group the new files landed in.
+function showImported(ids) {
+  const added = fonts.filter(f => ids.includes(f.id)); if (!added.length) return;
+  const groups = groupFonts(fonts), family = fontFamily(added[0]), at = groups.findIndex(g => g.family === family);
+  added.forEach(f => openGroups.add(fontFamily(f))); if (at >= 0) libraryPage = Math.floor(at / libraryPageSize) + 1;
+  showTab('library'); renderLibrary();
+  requestAnimationFrame(() => { const el = [...document.querySelectorAll('#font-list .font-group summary h3, #font-list .font-entry h3')].find(h => h.textContent === family || h.textContent === fileStem(added[0].label)); el?.closest('.font-group, .font-entry')?.scrollIntoView({ block: 'start' }); });
+}
 $('#download-refresh').onclick = () => run(loadDownloads);
-// The top import button goes straight to the Download list: fastest path, no WebView upload.
-$('#import-open').onclick = () => { showTab('library'); const panel = $('#download-import'); if (panel.open) run(loadDownloads); else panel.open = true; window.scrollTo(0, 0); };
-$('#download-all').onclick = () => { const fresh = downloadFiles.filter(f => !f.imported); const all = fresh.length && fresh.every(f => downloadChecked.has(f.path)); fresh.forEach(f => all ? downloadChecked.delete(f.path) : downloadChecked.add(f.path)); renderDownloads(); };
+$('#download-entry').onclick = () => { showTab('import'); window.scrollTo(0, 0); };
+$('#back-library').onclick = () => { showTab('library'); window.scrollTo(0, 0); };
+// The top import button goes straight to the Download page: fastest path, no WebView upload.
+$('#import-open').onclick = () => { showTab('import'); window.scrollTo(0, 0); };
+$('#download-all').onclick = () => toggleFresh(downloadFiles);
 $('#download-import-button').onclick = () => run(async () => {
-  $('#import-errors').hidden = true; const picked = downloadFiles.filter(f => downloadChecked.has(f.path)); const failed = []; let imported = 0; $('#import-progress').hidden = false;
+  $('#import-errors').hidden = true; const picked = downloadFiles.filter(f => downloadChecked.has(f.path)); const failed = [], ids = []; let imported = 0; $('#import-progress').hidden = false;
   try {
     for (const [i, f] of picked.entries()) {
       $('#import-message').textContent = `${f.name} · ${i + 1} / ${picked.length}`; $('#import-meter').value = Math.round(i / picked.length * 100);
-      try { await request({ op: 'import_path', path: f.path }); imported++; downloadChecked.delete(f.path); } catch (e) { failed.push(`${f.name}：${e.message}`); }
+      try { const asset = await request({ op: 'import_path', path: f.path }); ids.push(asset.id); imported++; downloadChecked.delete(f.path); } catch (e) { failed.push(`${f.name}：${e.message}`); }
     }
     if (imported) await loadStatus(true);
     await loadDownloads();
   } finally { $('#import-progress').hidden = true; }
   const summary = failed.length ? `已导入 ${imported} 个，${failed.length} 个失败` : `已导入 ${imported} 个字体文件`;
-  toast(summary); if (failed.length) renderImportErrors(summary, failed);
+  toast(summary); if (failed.length) renderImportErrors(summary, failed); else showImported(ids);
 });
 $('#cleanup-uploads').onclick = async () => { if (busy) return; if (await confirmAction('清理未完成导入', '清理未完成上传的临时文件。其他面板中正在进行的导入也会取消；已导入的字体和当前设置保留。')) run(async () => { const r = await request({ op: 'cleanup_uploads' }); toast(`已清理 ${r.removed} 项未完成导入`); }); };
 $('#font-file').onchange = event => run(async () => {
-  $('#import-errors').hidden = true; const files = [...event.target.files]; const failed = []; let imported = 0; $('#import-progress').hidden = false;
+  $('#import-errors').hidden = true; const files = [...event.target.files]; const failed = [], ids = []; let imported = 0; $('#import-progress').hidden = false;
   try {
     for (const file of files) {
       let upload;
@@ -335,7 +413,7 @@ $('#font-file').onchange = event => run(async () => {
         if (file.size > 256 * 1048576) throw new Error('单个字体不能超过 256 MiB');
         upload = await request({ op: 'upload_begin', size: file.size, label: file.name });
         for (let offset = 0; offset < file.size; offset += 48 * 1024) { const chunk = new Uint8Array(await file.slice(offset, offset + 48 * 1024).arrayBuffer()); await request({ op: 'upload_chunk', token: upload.token, offset, chunk: base64(chunk) }); $('#import-meter').value = Math.round((offset + chunk.length) / file.size * 100); $('#import-message').textContent = `${file.name} · ${$('#import-meter').value}%`; }
-        await request({ op: 'upload_finish', token: upload.token }); imported++;
+        const asset = await request({ op: 'upload_finish', token: upload.token }); if (asset?.id) ids.push(asset.id); imported++;
       } catch (e) {
         if (upload) { try { await request({ op: 'upload_cancel', token: upload.token }); } catch { /* A later import can retry; never hide original failure. */ } }
         // Keep going: one bad file should not stop the rest of the batch.
@@ -344,10 +422,10 @@ $('#font-file').onchange = event => run(async () => {
     }
     if (imported) await loadStatus(true);
   } finally { $('#font-file').value = ''; $('#import-progress').hidden = true; }
-  if (!failed.length) { toast(`已导入 ${imported} 个字体文件`); return; }
+  if (!failed.length) { toast(`已导入 ${imported} 个字体文件`); showImported(ids); return; }
   const summary = `已导入 ${imported} 个，${failed.length} 个失败`;
   toast(summary);
-  if (document.body.dataset.tab === 'library') renderImportErrors(summary, failed); else validation(summary, failed, true);
+  if (document.body.dataset.tab === 'import') renderImportErrors(summary, failed); else validation(summary, failed, true);
 });
 $('#preview-banner').hidden = !isPreview; renderTitle();
 if (!native && !isPreview) { $('#offline').hidden = false; $('#status-title').textContent = '尚未连接模块'; $('#status-description').textContent = '从模块管理器进入 WebUI 后可读取手机配置。'; renderSlots(); renderLibrary(); document.querySelectorAll('button,input,select').forEach(e => e.disabled = true); document.querySelectorAll('.tab-bar button').forEach(e => e.disabled = false); }

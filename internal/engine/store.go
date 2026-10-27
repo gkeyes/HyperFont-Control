@@ -38,12 +38,25 @@ type DownloadFont struct {
 	Folder string `json:"folder,omitempty"`
 }
 
+// downloadDirs are where Android keeps the shared Download folder; /sdcard is not
+// mounted for every root manager, so the storage paths behind it are tried as well.
+var downloadDirs = []string{"/sdcard/Download", "/storage/emulated/0/Download", "/data/media/0/Download"}
+
 func (s *Store) downloads() (string, error) {
-	dir := s.Downloads
-	if dir == "" {
-		dir = "/sdcard/Download"
+	dirs := downloadDirs
+	if s.Downloads != "" {
+		dirs = []string{s.Downloads}
 	}
-	return filepath.EvalSymlinks(dir)
+	for _, dir := range dirs {
+		path, e := filepath.EvalSymlinks(dir)
+		if e != nil {
+			continue
+		}
+		if info, e := os.Stat(path); e == nil && info.IsDir() {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("找不到 Download 文件夹（已查找 %s）", strings.Join(dirs, "、"))
 }
 
 // DownloadFonts lists font files in the Download folder and one level of subfolders,
@@ -51,7 +64,7 @@ func (s *Store) downloads() (string, error) {
 func (s *Store) DownloadFonts() ([]DownloadFont, error) {
 	dir, e := s.downloads()
 	if e != nil {
-		return nil, fmt.Errorf("无法读取 Download 文件夹: %v", e)
+		return nil, e
 	}
 	library, e := s.Library()
 	if e != nil {
@@ -87,6 +100,10 @@ func (s *Store) DownloadFonts() ([]DownloadFont, error) {
 				if depth < 1 && !strings.HasPrefix(entry.Name(), ".") {
 					walk(path, depth+1)
 				}
+				continue
+			}
+			// Hidden files are usually partial downloads or macOS "._" metadata, not fonts.
+			if strings.HasPrefix(entry.Name(), ".") {
 				continue
 			}
 			switch strings.ToLower(filepath.Ext(entry.Name())) {
