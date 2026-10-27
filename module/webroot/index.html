@@ -12,7 +12,7 @@
     <header class="topbar">
       <div><h1 id="page-title">字体</h1><p id="page-subtitle">选择喜欢的字，保留自己的习惯。</p></div>
       <button id="refresh" class="icon-button glass-button" aria-label="刷新状态"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.1 8a7.5 7.5 0 0 1 12.4-3L20 8M4 16l2.5 3A7.5 7.5 0 0 0 19 16"/></svg></button>
-      <label class="file-button primary import-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>导入字体<input id="font-file" type="file" accept=".ttf,.otf,.ttc,.otc" multiple></label>
+      <button id="import-open" class="primary import-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>导入字体</button>
     </header>
     <div id="offline" class="notice" hidden>请从模块管理器打开此面板，连接手机上的字体模块。</div>
     <div id="preview-banner" class="notice" hidden>电脑预览 · 操作仅作用于本地测试目录，不连接手机。</div>
@@ -45,10 +45,11 @@
     </section>
 
     <section id="library" class="tab-panel" hidden>
-      <details class="path-import glass">
-        <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg><span><strong>从 Download 文件夹导入</strong><small>适合大文件，不经过 WebView 分块传输</small></span></summary>
-        <label>字体完整路径<input id="import-path" class="glass-field" placeholder="/sdcard/Download/字体.ttf" autocomplete="off"></label>
-        <button id="import-path-button" class="glass-button">导入此文件</button>
+      <details id="download-import" class="path-import glass" open>
+        <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg><span><strong>从 Download 文件夹导入</strong><small>自动列出手机 Download 里的字体，勾选后直接导入，适合大文件和多个文件</small></span></summary>
+        <div class="download-tools"><button id="download-all" class="glass-button" type="button">全选未导入</button><button id="download-refresh" class="glass-button" type="button">刷新列表</button><label class="file-button glass-button">其他位置…<input id="font-file" type="file" accept=".ttf,.otf,.ttc,.otc" multiple></label></div>
+        <div id="download-list" class="download-list" role="group" aria-label="Download 中的字体文件"></div>
+        <button id="download-import-button" class="primary" type="button" disabled>导入所选</button>
       </details>
       <div id="import-progress" class="glass" role="status" hidden><span id="import-message"></span><progress id="import-meter" max="100" value="0"></progress></div>
       <section id="import-errors" class="validation glass" aria-live="polite" hidden></section>
@@ -72,7 +73,7 @@
         <p class="action-hint">恢复同样在手动重启后生效。卸载会移除本模块的字体库与设置。</p>
       </div>
     </section>
-    <footer>HyperFont <span id="version">2.2.0</span> <span>·</span> 本地运行，无需联网</footer>
+    <footer>HyperFont <span id="version">2.3.0</span> <span>·</span> 本地运行，无需联网</footer>
   </main>
   <div class="save-bar glass">
     <button id="validate" class="glass-button">检查</button><button id="save" class="glass-button">存草稿</button><button id="stage" class="primary">提交更改</button>

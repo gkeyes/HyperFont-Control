@@ -17,6 +17,7 @@ func main() {
 	data := flag.String("data", "", "isolated test data directory")
 	rom := flag.String("rom", "", "fixture ROM directory")
 	web := flag.String("web", "module/webroot", "web assets")
+	downloads := flag.String("downloads", "", "fixture Download folder (default: <data>/Download)")
 	addr := flag.String("listen", "127.0.0.1:8876", "localhost only")
 	flag.Parse()
 	if *data == "" || *rom == "" || !strings.HasPrefix(*addr, "127.0.0.1:") {
@@ -27,7 +28,11 @@ func main() {
 	if fixture == "/" || strings.HasPrefix(root, "/data/adb") {
 		panic("device paths prohibited")
 	}
-	s := &engine.Store{Root: root, RomRoot: fixture, Runtime: filepath.Join(root, "fake-runtime")}
+	s := &engine.Store{Root: root, RomRoot: fixture, Runtime: filepath.Join(root, "fake-runtime"), Downloads: *downloads}
+	if s.Downloads == "" {
+		s.Downloads = filepath.Join(root, "Download")
+		_ = os.MkdirAll(s.Downloads, 0o755)
+	}
 	if _, e := s.Locked(func() (any, error) { return s.Init() }); e != nil {
 		panic(e)
 	}
