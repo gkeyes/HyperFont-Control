@@ -83,4 +83,6 @@ test('files sharing declared and name weights take the nearest free steps', asyn
   assert.deepEqual(show(spreadFamily([f('Fam-Light', 300), f('Fam-Book', 400), f('Fam-Regular', 400), f('Fam-Bold', 700)], W)), ['300:Fam-Light', '400:Fam-Book?name', '500:Fam-Regular?order', '700:Fam-Bold']);
   assert.deepEqual(show(spreadFamily([f('A', 400, 'A'), f('B', 400, 'B')], W)), ['400:A?order', '700:B?order']);
   assert.deepEqual(show(spreadFamily([f('H-Bold', 400), f('H-BoldCondensed', 400), f('H-Regular', 400)], W)), ['400:H-Regular?name', '700:H-Bold?name', '800:H-BoldCondensed?order']);
+  // Two same-weight pairs stay in weight order: a heavier request never gets a lighter file.
+  assert.deepEqual(show(spreadFamily([f('Example-A', 300, 'Example'), f('Example-B', 300, 'Example'), f('Example-C', 500, 'Example'), f('Example-D', 500, 'Example')], W)), ['300:Example-A?order', '400:Example-B?order', '500:Example-C?order', '600:Example-D?order']);
 });

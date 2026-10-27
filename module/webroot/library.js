@@ -88,22 +88,25 @@ export function spreadFamily(entries, weights) {
     }
     // Files that share a weight take a run of free steps nearest it, the run that starts
     // at that weight winning a tie. Two files with nothing in their names to tell them
-    // apart are most often a regular and a bold, so they go to that weight and +300.
-    const target = e => named(e) || step(e.face.weight), groups = new Map();
+    // apart, and no other files to place, are most often a regular and a bold, so they go
+    // to that weight and +300. The steps found are then handed out in weight order, so a
+    // heavier request never gets a lighter file.
+    const target = e => named(e) || step(e.face.weight), groups = new Map(), steps = [];
     for (const e of rest.sort(byName)) { const t = target(e); if (!groups.has(t)) groups.set(t, []); groups.get(t).push(e); }
     for (const [t, group] of [...groups].sort(([a], [b]) => a - b)) {
-      free = weights.filter(w => !taken.has(w));
-      if (group.length === 2 && !group.some(named) && free.includes(t)) {
-        const second = free.filter(w => w !== t).sort((a, b) => Math.abs(a - t - 300) - Math.abs(b - t - 300))[0];
-        pick(group[0], t, 'order'); pick(group[1], second, 'order'); continue;
+      free = weights.filter(w => !taken.has(w) && !steps.includes(w));
+      if (groups.size === 1 && group.length === 2 && !group.some(named) && free.includes(t)) {
+        steps.push(t, free.filter(w => w !== t).sort((a, b) => Math.abs(a - t - 300) - Math.abs(b - t - 300))[0]); continue;
       }
       let best = 0, cost = Infinity;
       for (let i = 0; i + group.length <= free.length; i++) {
         const c = free.slice(i, i + group.length).reduce((sum, w) => sum + Math.abs(w - t), 0);
         if (c < cost || (c === cost && free[i] === t)) { best = i; cost = c; }
       }
-      group.forEach((e, j) => pick(e, free[best + j], named(e) === free[best + j] ? 'name' : 'order'));
+      steps.push(...free.slice(best, best + group.length));
     }
+    steps.sort((a, b) => a - b);
+    rest.sort((a, b) => target(a) - target(b) || byName(a, b)).forEach((e, j) => pick(e, steps[j], named(e) === steps[j] ? 'name' : 'order'));
   }
   return out.sort((a, b) => (a.style === 'italic') - (b.style === 'italic') || a.weight - b.weight);
 }
