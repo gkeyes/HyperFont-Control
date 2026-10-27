@@ -85,4 +85,8 @@ test('files sharing declared and name weights take the nearest free steps', asyn
   assert.deepEqual(show(spreadFamily([f('H-Bold', 400), f('H-BoldCondensed', 400), f('H-Regular', 400)], W)), ['400:H-Regular?name', '700:H-Bold?name', '800:H-BoldCondensed?order']);
   // Two same-weight pairs stay in weight order: a heavier request never gets a lighter file.
   assert.deepEqual(show(spreadFamily([f('Example-A', 300, 'Example'), f('Example-B', 300, 'Example'), f('Example-C', 500, 'Example'), f('Example-D', 500, 'Example')], W)), ['300:Example-A?order', '400:Example-B?order', '500:Example-C?order', '600:Example-D?order']);
+  // Declared weights that round to the same step keep their order.
+  const nine = 'ABCDEFGHI'.split('').map((n, i) => f(`Q-${n}`, 440 - i * 10, 'Q'));
+  assert.deepEqual(show(spreadFamily(nine, W)).map(r => r.split(':')[1].slice(0, 3)), ['Q-I', 'Q-H', 'Q-G', 'Q-F', 'Q-E', 'Q-D', 'Q-C', 'Q-B', 'Q-A']);
+  assert.deepEqual(show(spreadFamily([f('R-A', 420, 'R'), f('R-B', 380, 'R'), f('R-C', 700, 'R')], W)), ['400:R-B?order', '600:R-A?order', '700:R-C']);
 });

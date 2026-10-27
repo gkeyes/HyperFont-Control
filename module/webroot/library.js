@@ -81,7 +81,7 @@ export function spreadFamily(entries, weights) {
     if (!rest.length) continue;
     let free = weights.filter(w => !taken.has(w));
     if (rest.length >= free.length) {
-      rest.sort((a, b) => step(a.face.weight) - step(b.face.weight) || byName(a, b));
+      rest.sort((a, b) => a.face.weight - b.face.weight || byName(a, b));
       const n = rest.length, last = free.length - 1;
       free.forEach((w, i) => pick(rest[last ? Math.round(i * (n - 1) / last) : Math.floor((n - 1) / 2)], w, 'order'));
       continue;
@@ -106,7 +106,7 @@ export function spreadFamily(entries, weights) {
       steps.push(...free.slice(best, best + group.length));
     }
     steps.sort((a, b) => a - b);
-    rest.sort((a, b) => target(a) - target(b) || byName(a, b)).forEach((e, j) => pick(e, steps[j], named(e) === steps[j] ? 'name' : 'order'));
+    rest.sort((a, b) => target(a) - target(b) || a.face.weight - b.face.weight || byName(a, b)).forEach((e, j) => pick(e, steps[j], named(e) === steps[j] ? 'name' : 'order'));
   }
   return out.sort((a, b) => (a.style === 'italic') - (b.style === 'italic') || a.weight - b.weight);
 }
