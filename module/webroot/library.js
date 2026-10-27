@@ -58,32 +58,55 @@ export function nameWeight(name) {
 }
 
 // Fill the nine weight steps from a family's static files. A file whose declared weight
-// no other file shares goes to that step. Files that share one (many families declare
-// 400 in every file) go to the weight in their file or face name when that is unique;
-// the rest are spread over the free steps thinnest first in file-name order.
-// Returns face refs for each style; refs not set from a declared weight carry guess: true.
+// no other file shares goes to that step, and so does one whose weight read from its
+// file or face name is unique. Files that still share a weight (many families declare
+// 400 in every file) take the free steps nearest that weight, in file-name order; when
+// there are more of them than free steps they are spread over all steps thinnest first.
+// Returns face refs for each style; a ref not set from its declared weight carries
+// guess: 'name' (weight read from the name) or 'order' (placed by file-name order).
 export function spreadFamily(entries, weights) {
   const out = [];
   const step = w => Math.min(weights[weights.length - 1], Math.max(weights[0], Math.round(w / 100) * 100));
+  const tally = list => list.reduce((m, w) => m.set(w, (m.get(w) || 0) + 1), new Map());
+  const byName = (a, b) => naturalCompare(a.asset.label, b.asset.label) || a.face.index - b.face.index;
   for (const style of ['normal', 'italic']) {
     const list = entries.filter(e => !!e.face.italic === (style === 'italic'));
     if (!list.length) continue;
-    const pick = (e, weight, guess) => out.push({ assetId: e.asset.id, faceIndex: e.face.index, weight, style, ...(guess ? { guess: true } : {}) });
-    const taken = new Map(), count = (map, w) => map.set(w, (map.get(w) || 0) + 1), declared = new Map();
-    list.forEach(e => count(declared, step(e.face.weight)));
-    let rest = [];
-    for (const e of list) { const w = step(e.face.weight); if (declared.get(w) === 1 && weights.includes(w)) taken.set(w, e); else rest.push(e); }
-    const named = new Map(), guessOf = e => nameWeight(fileStem(e.asset.label)) ?? nameWeight(e.face.name);
-    rest.forEach(e => { const w = guessOf(e); if (w) count(named, w); });
-    rest = rest.filter(e => { const w = guessOf(e); if (w && named.get(w) === 1 && weights.includes(w) && !taken.has(w)) { taken.set(w, e); e.named = true; return false; } return true; });
-    for (const [w, e] of taken) pick(e, w, e.named);
-    list.forEach(e => delete e.named);
-    rest.sort((a, b) => a.face.weight - b.face.weight || naturalCompare(a.asset.label, b.asset.label) || a.face.index - b.face.index);
-    const free = weights.filter(w => !taken.has(w)), n = rest.length, last = free.length - 1;
-    if (!n || !free.length) continue;
-    if (n >= free.length) free.forEach((w, i) => pick(rest[last ? Math.round(i * (n - 1) / last) : Math.floor((n - 1) / 2)], w, true));
-    else if (n === 1) pick(rest[0], free.includes(400) ? 400 : free[Math.floor(last / 2)], true);
-    else rest.forEach((e, j) => pick(e, free[Math.round(j * last / (n - 1))], true));
+    const taken = new Map(), pick = (e, weight, guess) => { taken.set(weight, true); out.push({ assetId: e.asset.id, faceIndex: e.face.index, weight, style, ...(guess ? { guess } : {}) }); };
+    const declared = tally(list.map(e => step(e.face.weight)));
+    let rest = list.filter(e => { const w = step(e.face.weight); if (declared.get(w) === 1 && weights.includes(w)) { pick(e, w); return false; } return true; });
+    const named = e => nameWeight(fileStem(e.asset.label)) ?? nameWeight(e.face.name);
+    const fromName = tally(rest.map(named).filter(Boolean));
+    rest = rest.filter(e => { const w = named(e); if (w && fromName.get(w) === 1 && weights.includes(w) && !taken.has(w)) { pick(e, w, 'name'); return false; } return true; });
+    if (!rest.length) continue;
+    let free = weights.filter(w => !taken.has(w));
+    if (rest.length >= free.length) {
+      rest.sort((a, b) => a.face.weight - b.face.weight || byName(a, b));
+      const n = rest.length, last = free.length - 1;
+      free.forEach((w, i) => pick(rest[last ? Math.round(i * (n - 1) / last) : Math.floor((n - 1) / 2)], w, 'order'));
+      continue;
+    }
+    // Files that share a weight take a run of free steps nearest it, the run that starts
+    // at that weight winning a tie. Two files with nothing in their names to tell them
+    // apart, and no other files to place, are most often a regular and a bold, so they go
+    // to that weight and +300. The steps found are then handed out in weight order, so a
+    // heavier request never gets a lighter file.
+    const target = e => named(e) || step(e.face.weight), groups = new Map(), steps = [];
+    for (const e of rest.sort(byName)) { const t = target(e); if (!groups.has(t)) groups.set(t, []); groups.get(t).push(e); }
+    for (const [t, group] of [...groups].sort(([a], [b]) => a - b)) {
+      free = weights.filter(w => !taken.has(w) && !steps.includes(w));
+      if (groups.size === 1 && group.length === 2 && !group.some(named) && free.includes(t)) {
+        steps.push(t, free.filter(w => w !== t).sort((a, b) => Math.abs(a - t - 300) - Math.abs(b - t - 300))[0]); continue;
+      }
+      let best = 0, cost = Infinity;
+      for (let i = 0; i + group.length <= free.length; i++) {
+        const c = free.slice(i, i + group.length).reduce((sum, w) => sum + Math.abs(w - t), 0);
+        if (c < cost || (c === cost && free[i] === t)) { best = i; cost = c; }
+      }
+      steps.push(...free.slice(best, best + group.length));
+    }
+    steps.sort((a, b) => a - b);
+    rest.sort((a, b) => target(a) - target(b) || a.face.weight - b.face.weight || byName(a, b)).forEach((e, j) => pick(e, steps[j], named(e) === steps[j] ? 'name' : 'order'));
   }
   return out.sort((a, b) => (a.style === 'italic') - (b.style === 'italic') || a.weight - b.weight);
 }

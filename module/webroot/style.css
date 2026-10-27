@@ -264,7 +264,7 @@ dialog p{font-size:14px;line-height:1.7;color:var(--muted);margin:12px 0 20px}
 #import .download-list{max-height:none}
 .download-folder{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:6px 12px;border-top:1px solid var(--line);font-size:12px;font-weight:650;color:var(--muted);background:var(--accent-soft)}
 .download-folder:first-child{border-top:0}
-.download-folder button{min-height:32px;padding:0 12px;border-radius:16px;font-size:11.5px}
+.download-folder button{min-height:44px;border-radius:22px;padding:0 14px;font-size:11.5px}
 .download-empty strong{display:block;color:var(--ink,inherit);margin-bottom:4px}
 .import-sticky{position:sticky;bottom:calc(104px + env(safe-area-inset-bottom));z-index:3}
 .highlight-pick{animation:pick 1.6s ease-out 2}

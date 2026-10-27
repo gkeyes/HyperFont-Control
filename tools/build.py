@@ -11,7 +11,7 @@ import zipfile
 from build_compat import build as build_compat
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 CACHE = Path.home() / ".cache/hyperfont-control-build"
 CACHE.mkdir(parents=True, exist_ok=True)
 JOBS = max(1, min(8, int(os.environ.get("HFC_BUILD_JOBS", "1"))))
