@@ -128,8 +128,14 @@ body:not(.editing-font) #slots{display:grid;grid-template-columns:repeat(2,minma
 .weight-problem{color:var(--danger)}
 .weight-row.invalid input{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 3px var(--danger-soft)}
 .weight-row input{min-height:38px;border-radius:12px;text-align:center;padding:0 6px;font-variant-numeric:tabular-nums}
-.weight-bar{height:6px;border-radius:3px;background:var(--accent-soft);overflow:hidden}
-.weight-bar i{display:block;height:100%;border-radius:3px;background:var(--accent);transition:width .15s}
+.weight-row input.weight-slider{-webkit-appearance:none;appearance:none;width:100%;height:36px;min-height:0;padding:0;margin:0;background:transparent;border:0;box-shadow:none;touch-action:pan-y}
+.weight-row.invalid input.weight-slider{border:0;box-shadow:none}
+.weight-slider::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--accent) var(--fill,0%),var(--accent-soft) var(--fill,0%))}
+.weight-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;margin-top:-9px;border-radius:50%;background:var(--surface,#fff);border:1px solid var(--glass-edge);box-shadow:0 2px 8px var(--glass-shadow)}
+.weight-slider::-moz-range-track{height:6px;border-radius:3px;background:var(--accent-soft)}
+.weight-slider::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent)}
+.weight-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:1px solid var(--glass-edge)}
+.weight-row.invalid .weight-slider::-webkit-slider-runnable-track{background:linear-gradient(90deg,var(--danger) var(--fill,0%),var(--danger-soft) var(--fill,0%))}
 .advanced-axes{font-size:12px;color:var(--muted)}
 .advanced-axes summary{min-height:44px;display:flex;align-items:center;cursor:pointer}
 .advanced-axes .field{margin-top:8px}
@@ -165,8 +171,32 @@ body:not([data-tab=settings]) .save-bar{display:none}
 .path-import summary span{display:flex;flex-direction:column;gap:2px}
 .path-import summary strong{font-size:13.5px}
 .path-import summary small{font-size:11.5px;color:var(--muted)}
-.path-import label{display:flex;flex-direction:column;gap:6px;color:var(--muted)}
-.path-import button{margin:12px 0 14px}
+.download-tools{display:flex;gap:8px;margin:2px 0 10px}
+.download-tools>*{flex:1;min-height:38px;border-radius:19px;font-size:12.5px;padding:0 8px}
+.download-list{display:flex;flex-direction:column;max-height:46vh;overflow:auto;border-radius:16px;background:var(--field)}
+.download-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:52px;padding:6px 12px;border-top:1px solid var(--line);color:var(--ink,inherit)}
+.download-row:first-child{border-top:0}
+.download-row input{width:20px;height:20px;accent-color:var(--accent);margin:0}
+.download-row strong{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.download-row small{display:block;font-size:11px;color:var(--muted)}
+.download-row.done{opacity:.6}
+.download-empty{padding:16px;color:var(--muted);line-height:1.6}
+#download-import-button{width:100%;min-height:46px;border-radius:23px;margin:12px 0 14px}
+#download-import-button:disabled{opacity:.45}
+.font-group{border-top:1px solid var(--line)}
+.font-group:first-child{border-top:0}
+.font-group>summary{list-style:none;display:grid;grid-template-columns:56px minmax(0,1fr) 24px;gap:12px;align-items:center;padding:12px 14px;cursor:pointer}
+.font-group>summary::-webkit-details-marker{display:none}
+.font-group h3{margin:0;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+.font-group summary p{margin:3px 0 5px;font-size:11.5px;color:var(--muted)}
+.chevron{width:10px;height:10px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);justify-self:center;transition:transform .2s}
+.font-group[open] .chevron{transform:rotate(225deg)}
+.group-files{margin:0 10px 12px 24px;border-left:2px solid var(--accent-soft)}
+.font-entry.compact{grid-template-columns:minmax(0,1fr) auto;padding:4px 4px 4px 14px;min-height:52px}
+.font-entry.compact h3{font-size:13.5px}
+.font-entry.compact p{margin:1px 0 0}
+.font-entry.compact details{grid-column:1/3}
+.group-files .danger-text{display:block;margin:6px 0 0 14px;min-height:36px;padding:0 14px;border-radius:18px;color:var(--danger);font-size:12.5px}
 #import-progress{border-radius:18px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--muted)}
 progress{width:100%;height:6px;accent-color:var(--accent)}
 .font-list{border-radius:24px;overflow:hidden}

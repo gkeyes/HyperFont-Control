@@ -24,7 +24,97 @@ type Store struct {
 	Root    string
 	RomRoot string
 	Runtime string
+	// Downloads is the phone's Download folder; empty means /sdcard/Download.
+	Downloads string
 }
+
+type DownloadFont struct {
+	Path     string `json:"path"`
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	Modified int64  `json:"modified"`
+	Imported bool   `json:"imported"`
+	// Folder is the subfolder of Download holding the file, empty at the top level.
+	Folder string `json:"folder,omitempty"`
+}
+
+func (s *Store) downloads() (string, error) {
+	dir := s.Downloads
+	if dir == "" {
+		dir = "/sdcard/Download"
+	}
+	return filepath.EvalSymlinks(dir)
+}
+
+// DownloadFonts lists font files in the Download folder and one level of subfolders,
+// newest first, so the panel can import them by path without the WebView picker.
+func (s *Store) DownloadFonts() ([]DownloadFont, error) {
+	dir, e := s.downloads()
+	if e != nil {
+		return nil, fmt.Errorf("无法读取 Download 文件夹: %v", e)
+	}
+	library, e := s.Library()
+	if e != nil {
+		return nil, e
+	}
+	// Name and size pick candidates cheaply; only those get hashed to confirm the content.
+	known := map[string]map[string]bool{}
+	for _, a := range library {
+		key := fmt.Sprint(a.Label, "\x00", a.Size)
+		if known[key] == nil {
+			known[key] = map[string]bool{}
+		}
+		known[key][a.ID] = true
+	}
+	imported := func(path, name string, size int64) bool {
+		ids := known[fmt.Sprint(name, "\x00", size)]
+		if ids == nil {
+			return false
+		}
+		b, err := os.ReadFile(path)
+		return err == nil && ids[digest(b)]
+	}
+	out := []DownloadFont{}
+	var walk func(string, int)
+	walk = func(d string, depth int) {
+		entries, err := os.ReadDir(d)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			path := filepath.Join(d, entry.Name())
+			if entry.IsDir() {
+				if depth < 1 && !strings.HasPrefix(entry.Name(), ".") {
+					walk(path, depth+1)
+				}
+				continue
+			}
+			switch strings.ToLower(filepath.Ext(entry.Name())) {
+			case ".ttf", ".otf", ".ttc", ".otc":
+			default:
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil || !info.Mode().IsRegular() || info.Size() < 12 || info.Size() > MaxFontSize {
+				continue
+			}
+			folder := ""
+			if depth > 0 {
+				folder = filepath.Base(d)
+			}
+			out = append(out, DownloadFont{path, entry.Name(), info.Size(), info.ModTime().Unix(), imported(path, entry.Name(), info.Size()), folder})
+		}
+	}
+	walk(dir, 0)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Modified != out[j].Modified {
+			return out[i].Modified > out[j].Modified
+		}
+		return out[i].Path < out[j].Path
+	})
+	return out, nil
+}
+
 type Baseline struct {
 	Fingerprint string            `json:"fingerprint"`
 	Configs     map[string]string `json:"configs"`
@@ -644,12 +734,14 @@ func (s *Store) Handle(r Request) (any, error) {
 		return s.stage(DefaultProfile(), false)
 	case "cancel_pending":
 		return map[string]bool{"cancelled": true}, removeIfExists(s.data("pending"))
+	case "list_downloads":
+		return s.DownloadFonts()
 	case "import_path":
 		path, e := filepath.EvalSymlinks(r.Path)
 		if e != nil {
 			return nil, e
 		}
-		allowed, e := filepath.EvalSymlinks("/sdcard/Download")
+		allowed, e := s.downloads()
 		if e != nil {
 			return nil, e
 		}

@@ -740,3 +740,57 @@ func TestWeightMapErrorsNameValueAndRange(t *testing.T) {
 		t.Fatalf("not monotonic: %v", e)
 	}
 }
+
+func TestDownloadFontsListsAndMarksImported(t *testing.T) {
+	root := t.TempDir()
+	downloads := filepath.Join(root, "Download")
+	for _, dir := range []string{downloads, filepath.Join(downloads, "fonts"), filepath.Join(downloads, "fonts", "deep"), filepath.Join(downloads, ".hidden")} {
+		if e := os.MkdirAll(dir, 0o755); e != nil {
+			t.Fatal(e)
+		}
+	}
+	font := fixtureFont(false)
+	for _, p := range []string{"A-25S.ttf", "fonts/B.OTF", "fonts/deep/C.ttf", ".hidden/D.ttf"} {
+		if e := os.WriteFile(filepath.Join(downloads, p), font, 0o644); e != nil {
+			t.Fatal(e)
+		}
+	}
+	_ = os.WriteFile(filepath.Join(downloads, "notes.txt"), font, 0o644)
+	s := &Store{Root: filepath.Join(root, "data"), RomRoot: root, Downloads: downloads}
+	list, e := s.DownloadFonts()
+	if e != nil {
+		t.Fatal(e)
+	}
+	names := []string{}
+	for _, f := range list {
+		names = append(names, f.Name)
+		if f.Imported {
+			t.Fatalf("%s marked imported before import", f.Name)
+		}
+	}
+	if strings.Join(names, ",") != "A-25S.ttf,B.OTF" {
+		t.Fatalf("listed %v", names)
+	}
+	if _, e = s.Handle(Request{Op: "import_path", Path: list[0].Path}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.Handle(Request{Op: "import_path", Path: filepath.Join(root, "outside.ttf")}); e == nil {
+		t.Fatal("import outside Download accepted")
+	}
+	list, _ = s.DownloadFonts()
+	if !list[0].Imported && !list[1].Imported {
+		t.Fatalf("imported file not marked: %+v", list)
+	}
+	// Same name and size but different bytes is not the imported font.
+	changed := append([]byte{}, font...)
+	changed[len(changed)-1] ^= 0xff
+	if e = os.WriteFile(filepath.Join(downloads, "A-25S.ttf"), changed, 0o644); e != nil {
+		t.Fatal(e)
+	}
+	list, _ = s.DownloadFonts()
+	for _, f := range list {
+		if f.Name == "A-25S.ttf" && f.Imported {
+			t.Fatal("changed file still marked imported")
+		}
+	}
+}

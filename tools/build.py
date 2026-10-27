@@ -11,7 +11,7 @@ import zipfile
 from build_compat import build as build_compat
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 CACHE = Path.home() / ".cache/hyperfont-control-build"
 CACHE.mkdir(parents=True, exist_ok=True)
 JOBS = max(1, min(8, int(os.environ.get("HFC_BUILD_JOBS", "1"))))
@@ -35,7 +35,7 @@ if not prop.get("updateJson", "").startswith("https://"):
     raise SystemExit("module.prop needs an https updateJson for online updates")
 run(["go", "test", f"-p={JOBS}", "./..."])
 run(["go", "vet", f"-p={JOBS}", "./..."])
-run(["node", "--test", "tests/web_weights.test.mjs"])
+run(["node", "--test", "tests/web_weights.test.mjs", "tests/web_library.test.mjs"])
 with tempfile.TemporaryDirectory(prefix="package-", dir=CACHE) as temporary:
     stage = Path(temporary) / "module"
     shutil.copytree(ROOT / "module", stage)
@@ -83,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix="package-", dir=CACHE) as temporary:
     with zipfile.ZipFile(archive) as z:
         assert z.testzip() is None
         names = set(z.namelist())
-        assert {"skip_mount", "module.prop", "customize.sh", "post-mount.sh", "service.sh", "boot-completed.sh", "uninstall.sh", "webroot/index.html", "webroot/weights.js", "bin/arm64/hfctl", "bin/x86_64/hfctl", "bin/verify-fonts.jar", "zygisk/arm64-v8a.so", "zygisk/x86_64.so"} <= names
+        assert {"skip_mount", "module.prop", "customize.sh", "post-mount.sh", "service.sh", "boot-completed.sh", "uninstall.sh", "webroot/index.html", "webroot/weights.js", "webroot/library.js", "bin/arm64/hfctl", "bin/x86_64/hfctl", "bin/verify-fonts.jar", "zygisk/arm64-v8a.so", "zygisk/x86_64.so"} <= names
         assert not any(n.startswith("system/") for n in names)
         assert not any(n.endswith((".ttf", ".otf", ".ttc")) for n in names)
         assert not any("libc-import" in n or n.endswith("/libc.so") for n in names)
